@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.cricpro.app.domain.model.Match
 import com.cricpro.app.domain.model.Team
-import com.cricpro.app.presentation.components.AdBanner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -117,11 +116,6 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item { Spacer(modifier = Modifier.height(4.dp)) }
-
-            // Ad Banner
-            item {
-                AdBanner()
-            }
 
             // Recent Matches Section
             item {
