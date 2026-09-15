@@ -106,7 +106,7 @@ fun ScorecardScreen(
                         text = match.resultMessage,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF00875A)
+                        color = Color(0xFF1B5E20)
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                 }
@@ -172,7 +172,7 @@ fun PillChip(
     Box(
         modifier = Modifier
             .clip(CircleShape)
-            .background(if (isSelected) Color(0xFF00875A) else Color(0xFFE0E0E0))
+            .background(if (isSelected) Color(0xFF1B5E20) else Color(0xFFE0E0E0))
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
@@ -216,7 +216,7 @@ fun ScorecardTableCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF00875A))
+                    .background(Color(0xFF1B5E20))
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
