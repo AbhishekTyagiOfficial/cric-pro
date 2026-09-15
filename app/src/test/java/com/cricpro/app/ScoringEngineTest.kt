@@ -214,6 +214,33 @@ class ScoringEngineTest {
         val isSelectedOut = res.updatedInnings.batters[selectedStriker]?.isOut == true
         assertFalse("User selected batter sudeep is not out", isSelectedOut)
     }
+
+    @Test
+    fun testBatterScoreNameAndIdConsolidation() {
+        // Ball 1 scored by player ID "p1"
+        val ball1 = Ball(ballId = "b1", strikerId = "p1", nonStrikerId = "p2", bowlerId = "bw1", runsScored = 4)
+        val res1 = scoringEngine.processBall(baseInnings, ball1, 20)
+
+        // Ball 2 scored by player Name "p1"
+        val ball2 = Ball(ballId = "b2", strikerId = "p1", nonStrikerId = "p2", bowlerId = "bw1", runsScored = 2)
+        val res2 = scoringEngine.processBall(res1.updatedInnings, ball2, 20)
+
+        val batterScore = res2.updatedInnings.batters["p1"]
+        assertNotNull("Batter score should exist for p1", batterScore)
+        assertEquals("Total runs for p1 should accumulate to 6", 6, batterScore?.runs)
+        assertEquals("Total balls for p1 should accumulate to 2", 2, batterScore?.balls)
+    }
+
+    @Test
+    fun testNonStrikerMapPresence() {
+        val ball = Ball(ballId = "b1", strikerId = "StrikerA", nonStrikerId = "NonStrikerB", bowlerId = "Bowler1", runsScored = 2)
+        val res = scoringEngine.processBall(baseInnings, ball, 20)
+
+        val nonStrikerScore = res.updatedInnings.batters["NonStrikerB"]
+        assertNotNull("Non-striker NonStrikerB should be present in batters map", nonStrikerScore)
+        assertEquals("Non-striker runs should be 0", 0, nonStrikerScore?.runs)
+        assertEquals("Non-striker balls should be 0", 0, nonStrikerScore?.balls)
+    }
 }
 
 

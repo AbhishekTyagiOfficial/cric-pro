@@ -1,5 +1,6 @@
 package com.cricpro.app
 
+import com.cricpro.app.data.local.entity.MatchEntity
 import com.cricpro.app.data.repository.toDomain
 import com.cricpro.app.data.repository.toEntity
 import com.cricpro.app.domain.engine.ScoringEngine
@@ -236,5 +237,85 @@ class MatchOversAndCompletionTest {
 
         assertEquals("m2", sortedList.first().matchId)
         assertEquals("m1", sortedList.last().matchId)
+    }
+
+    @Test
+    fun testTossDecisionTeamBChoseToBatFirst() {
+        val entity = MatchEntity(
+            matchId = "m_toss_test",
+            tournamentId = null,
+            title = "Team A vs Team B",
+            matchType = "T20",
+            totalOvers = 20,
+            groundName = "Stadium",
+            matchDate = 10000L,
+            teamAId = "tA",
+            teamAName = "Sher ki team",
+            teamBId = "tB",
+            teamBName = "dushman ki team",
+            tossWinnerId = "dushman ki team",
+            tossDecision = "BAT",
+            status = "IN_PROGRESS",
+            currentInningsNumber = 1,
+            resultMessage = "",
+            winnerTeamId = null,
+            creatorId = "user1",
+            scorerId = "user1",
+            matchJson = ""
+        )
+
+        val domain = entity.toDomain()
+
+        assertNotNull(domain.firstInnings)
+        // Team B (dushman ki team) should be the batting team for Innings 1
+        assertEquals("tB", domain.firstInnings?.battingTeamId)
+        assertEquals("tA", domain.firstInnings?.bowlingTeamId)
+
+        assertNotNull(domain.secondInnings)
+        // Team A (Sher ki team) should be the batting team for Innings 2
+        assertEquals("tA", domain.secondInnings?.battingTeamId)
+        assertEquals("tB", domain.secondInnings?.bowlingTeamId)
+    }
+
+    @Test
+    fun testCustomSquadSize3PlayersAllOutAfter2Wickets() {
+        val p1 = Player(playerId = "p1", name = "Player 1")
+        val p2 = Player(playerId = "p2", name = "Player 2")
+        val p3 = Player(playerId = "p3", name = "Player 3")
+
+        val p4 = Player(playerId = "p4", name = "Player 4")
+        val p5 = Player(playerId = "p5", name = "Player 5")
+        val p6 = Player(playerId = "p6", name = "Player 6")
+
+        val team3A = Team(teamId = "tA", teamName = "Team A", players = listOf(p1, p2, p3))
+        val team3B = Team(teamId = "tB", teamName = "Team B", players = listOf(p4, p5, p6))
+
+        val ball1 = Ball(
+            ballId = "b1", matchId = "m_3p", inningsNumber = 1,
+            strikerId = "p1", nonStrikerId = "p2", bowlerId = "p4",
+            runsScored = 0, wicketType = WicketType.BOWLED, dismissedPlayerId = "p1"
+        )
+        val ball2 = Ball(
+            ballId = "b2", matchId = "m_3p", inningsNumber = 1,
+            strikerId = "p3", nonStrikerId = "p2", bowlerId = "p4",
+            runsScored = 0, wicketType = WicketType.BOWLED, dismissedPlayerId = "p3"
+        )
+
+        val maxWickets = (team3A.players.size - 1).coerceAtMost(10)
+        assertEquals(2, maxWickets)
+
+        val res = scoringEngine.recalculateInnings(
+            balls = listOf(ball1, ball2),
+            battingTeamId = "tA",
+            bowlingTeamId = "tB",
+            inningsNumber = 1,
+            target = null,
+            totalOversInMatch = 10,
+            maxWickets = maxWickets
+        )
+
+        val updatedInn1 = res.updatedInnings
+        assertEquals(2, updatedInn1.wickets)
+        assertTrue("Innings must be completed when 2 wickets are lost for a 3-player team", updatedInn1.isCompleted)
     }
 }

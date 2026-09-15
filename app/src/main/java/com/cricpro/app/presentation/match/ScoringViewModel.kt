@@ -84,23 +84,34 @@ class ScoringViewModel @Inject constructor(
                     val inn1Base = match.firstInnings ?: Innings(1, match.teamA.teamId, match.teamB.teamId)
                     val inn2Base = match.secondInnings ?: Innings(2, match.teamB.teamId, match.teamA.teamId)
 
+                    fun getMaxWicketsForTeam(team: Team): Int {
+                        return if (team.players.size > 1) (team.players.size - 1).coerceAtMost(10) else 10
+                    }
+
+                    val batTeam1 = if (inn1Base.battingTeamId == match.teamA.teamId) match.teamA else match.teamB
+                    val maxWickets1 = getMaxWicketsForTeam(batTeam1)
+
                     val res1 = scoringEngine.recalculateInnings(
                         balls = balls1,
                         battingTeamId = inn1Base.battingTeamId,
                         bowlingTeamId = inn1Base.bowlingTeamId,
                         inningsNumber = 1,
                         target = null,
-                        totalOversInMatch = totalOvers
+                        totalOversInMatch = totalOvers,
+                        maxWickets = maxWickets1
                     )
 
                     var updatedInn1 = res1.updatedInnings
                     val maxBalls = totalOvers * 6
-                    if (updatedInn1.legalBallsBowled >= maxBalls || updatedInn1.wickets >= 10) {
+                    if (updatedInn1.legalBallsBowled >= maxBalls || updatedInn1.wickets >= maxWickets1) {
                         updatedInn1 = updatedInn1.copy(isCompleted = true)
                     }
 
                     val targetForInn2 = if (updatedInn1.isCompleted || balls1.isNotEmpty()) updatedInn1.totalRuns + 1 else null
                     val updatedInn2Base = inn2Base.copy(target = targetForInn2)
+
+                    val batTeam2 = if (inn2Base.battingTeamId == match.teamA.teamId) match.teamA else match.teamB
+                    val maxWickets2 = getMaxWicketsForTeam(batTeam2)
 
                     val res2 = scoringEngine.recalculateInnings(
                         balls = balls2,
@@ -108,11 +119,12 @@ class ScoringViewModel @Inject constructor(
                         bowlingTeamId = updatedInn2Base.bowlingTeamId,
                         inningsNumber = 2,
                         target = targetForInn2,
-                        totalOversInMatch = totalOvers
+                        totalOversInMatch = totalOvers,
+                        maxWickets = maxWickets2
                     )
 
                     var updatedInn2 = res2.updatedInnings
-                    if (updatedInn2.isCompleted || (targetForInn2 != null && updatedInn2.totalRuns >= targetForInn2) || updatedInn2.legalBallsBowled >= maxBalls || updatedInn2.wickets >= 10) {
+                    if (updatedInn2.isCompleted || (targetForInn2 != null && updatedInn2.totalRuns >= targetForInn2) || updatedInn2.legalBallsBowled >= maxBalls || updatedInn2.wickets >= maxWickets2) {
                         updatedInn2 = updatedInn2.copy(isCompleted = true)
                     }
 
@@ -142,7 +154,7 @@ class ScoringViewModel @Inject constructor(
 
                         if (inn2Runs >= targetVal) {
                             winnerId = updatedInn2.battingTeamId
-                            val wktsLeft = 10 - updatedInn2.wickets
+                            val wktsLeft = maxWickets2 - updatedInn2.wickets
                             resultMsg = "$batTeamName won by $wktsLeft wickets!"
                         } else if (inn1Runs > inn2Runs) {
                             winnerId = updatedInn1.battingTeamId
@@ -155,13 +167,19 @@ class ScoringViewModel @Inject constructor(
 
                     val activeRes = if (activeInningsNum == 1) res1 else res2
 
-                    fun isTeamA(idOrName: String?, teamA: Team): Boolean {
+                    fun isTeamA(idOrName: String?, teamA: Team, teamB: Team): Boolean {
                         if (idOrName.isNullOrBlank()) return true
-                        return idOrName == teamA.teamId || (teamA.teamName.isNotBlank() && idOrName.equals(teamA.teamName, ignoreCase = true))
+                        if (idOrName == teamB.teamId || (teamB.teamName.isNotBlank() && idOrName.equals(teamB.teamName, ignoreCase = true))) {
+                            return false
+                        }
+                        if (idOrName == teamA.teamId || (teamA.teamName.isNotBlank() && idOrName.equals(teamA.teamName, ignoreCase = true))) {
+                            return true
+                        }
+                        return true
                     }
 
                     val activeBattingTeamId = if (activeInningsNum == 1) inn1Base.battingTeamId else inn2Base.battingTeamId
-                    val isBattingTeamA = isTeamA(activeBattingTeamId, match.teamA)
+                    val isBattingTeamA = isTeamA(activeBattingTeamId, match.teamA, match.teamB)
 
                     val batTeamActive = if (isBattingTeamA) match.teamA else match.teamB
                     val bowlTeamActive = if (isBattingTeamA) match.teamB else match.teamA
@@ -224,27 +242,33 @@ class ScoringViewModel @Inject constructor(
                     val existingBatterNames = activeRes.updatedInnings.batters.values.map { if (it.name.isNotBlank()) it.name else it.playerId }
                     val allBattingCandidates = (squadNames + existingBatterNames).distinct().filter { it.isNotBlank() }
 
-                    fun findNextIncomingBatter(otherBatterName: String?): String {
+                    val maxWicketsActive = getMaxWicketsForTeam(batTeamActive)
+
+                    fun findNextIncomingBatter(otherBatterName: String?): String? {
+                        if (activeRes.updatedInnings.wickets >= maxWicketsActive) return null
                         val found = allBattingCandidates.find { name ->
                             val bScore = getBatterScore(name)
                             val isOut = bScore?.isOut == true
                             val isOther = (name == otherBatterName)
                             !isOut && !isOther
                         }
-                        return found ?: "Player ${(activeRes.updatedInnings.wickets + 2)}"
+                        if (found != null) return found
+                        if (batTeamActive.players.isNotEmpty()) return null
+                        if (activeRes.updatedInnings.wickets >= 10) return null
+                        return "Player ${(activeRes.updatedInnings.wickets + 2)}"
                     }
 
                     val strikerIsOut = getBatterScore(rawStriker)?.isOut == true
                     val nonStrikerIsOut = getBatterScore(rawNonStriker)?.isOut == true
 
                     val resolvedStriker = if (strikerIsOut) {
-                        _overrideStrikerId.value ?: findNextIncomingBatter(rawNonStriker)
+                        _overrideStrikerId.value ?: findNextIncomingBatter(rawNonStriker) ?: rawStriker
                     } else {
                         rawStriker
                     }
 
                     val resolvedNonStriker = if (nonStrikerIsOut) {
-                        _overrideNonStrikerId.value ?: findNextIncomingBatter(resolvedStriker)
+                        _overrideNonStrikerId.value ?: findNextIncomingBatter(resolvedStriker) ?: rawNonStriker
                     } else {
                         rawNonStriker
                     }

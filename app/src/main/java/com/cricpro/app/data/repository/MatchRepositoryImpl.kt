@@ -57,8 +57,13 @@ class MatchRepositoryImpl @Inject constructor(
             val matchEntity = matchDao.getMatchByIdDirect(matchId) ?: return Result.failure(Exception("Match not found"))
             val currentMatch = matchEntity.toDomain()
 
-            val battingTeamId = if (decision == TossDecision.BAT) tossWinnerId else if (tossWinnerId == currentMatch.teamA.teamId) currentMatch.teamB.teamId else currentMatch.teamA.teamId
-            val bowlingTeamId = if (battingTeamId == currentMatch.teamA.teamId) currentMatch.teamB.teamId else currentMatch.teamA.teamId
+            val isWinnerTeamA = tossWinnerId == currentMatch.teamA.teamId ||
+                (currentMatch.teamA.teamName.isNotBlank() && tossWinnerId.equals(currentMatch.teamA.teamName, ignoreCase = true))
+
+            val isBattingTeamA = if (decision == TossDecision.BAT) isWinnerTeamA else !isWinnerTeamA
+
+            val battingTeamId = if (isBattingTeamA) currentMatch.teamA.teamId else currentMatch.teamB.teamId
+            val bowlingTeamId = if (isBattingTeamA) currentMatch.teamB.teamId else currentMatch.teamA.teamId
 
             val updatedMatch = currentMatch.copy(
                 tossWinnerId = tossWinnerId,
@@ -177,8 +182,11 @@ fun Match.toEntity(): MatchEntity {
 }
 
 fun MatchEntity.toDomain(): Match {
-    val battingA = if (tossDecision == "BAT") tossWinnerId ?: teamAId else if (tossWinnerId == teamAId) teamBId else teamAId
-    val bowlingA = if (battingA == teamAId) teamBId else teamAId
+    val isWinnerTeamA = tossWinnerId == teamAId || (teamAName.isNotBlank() && tossWinnerId.equals(teamAName, ignoreCase = true))
+    val isBattingTeamA = if (tossDecision?.uppercase() == "BAT") isWinnerTeamA else !isWinnerTeamA
+
+    val battingA = if (isBattingTeamA) teamAId else teamBId
+    val bowlingA = if (isBattingTeamA) teamBId else teamAId
 
     var inn1: Innings? = null
     var inn2: Innings? = null

@@ -53,10 +53,17 @@ class ScoreBallUseCase @Inject constructor(
             totalLegalBallsInInnings = currentLegal + (if (ball.isLegalDelivery) 1 else 0)
         )
 
+        val maxWickets = if (currentInnings.battingTeamId == currentMatch.teamA.teamId) {
+            if (currentMatch.teamA.players.size > 1) (currentMatch.teamA.players.size - 1).coerceAtMost(10) else 10
+        } else {
+            if (currentMatch.teamB.players.size > 1) (currentMatch.teamB.players.size - 1).coerceAtMost(10) else 10
+        }
+
         val scoringResult = scoringEngine.processBall(
             currentInnings = currentInnings,
             ball = ballWithInnings,
-            totalOversInMatch = currentMatch.totalOvers
+            totalOversInMatch = currentMatch.totalOvers,
+            maxWickets = maxWickets
         )
 
         // Save ball in local DB & sync queue
@@ -79,7 +86,7 @@ class ScoreBallUseCase @Inject constructor(
             val inn1LegalBalls = scoringResult.updatedInnings.legalBallsBowled
             val inn1Wickets = scoringResult.updatedInnings.wickets
 
-            if (inn1LegalBalls >= maxLegalBalls || inn1Wickets >= 10) {
+            if (inn1LegalBalls >= maxLegalBalls || inn1Wickets >= maxWickets) {
                 updatedFirstInnings = scoringResult.updatedInnings.copy(isCompleted = true)
                 nextInningsNumber = 2
                 val targetRuns = updatedFirstInnings.totalRuns + 1
@@ -102,7 +109,7 @@ class ScoreBallUseCase @Inject constructor(
 
             val isTargetReached = inn2Runs >= targetRuns
             val isOversOver = inn2LegalBalls >= maxLegalBalls
-            val isAllOut = inn2Wickets >= 10
+            val isAllOut = inn2Wickets >= maxWickets
 
             if (isTargetReached || isOversOver || isAllOut) {
                 updatedSecondInnings = scoringResult.updatedInnings.copy(isCompleted = true)
@@ -113,7 +120,7 @@ class ScoreBallUseCase @Inject constructor(
 
                 if (inn2Runs >= targetRuns) {
                     winnerTeamId = updatedSecondInnings.battingTeamId
-                    val wktsLeft = 10 - inn2Wickets
+                    val wktsLeft = maxWickets - inn2Wickets
                     resultMessage = "$batTeamName won by $wktsLeft wickets!"
                 } else if (inn1Runs > inn2Runs) {
                     winnerTeamId = updatedFirstInnings?.battingTeamId

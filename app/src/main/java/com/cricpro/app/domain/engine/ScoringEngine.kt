@@ -15,7 +15,8 @@ class ScoringEngine {
     fun processBall(
         currentInnings: Innings,
         ball: Ball,
-        totalOversInMatch: Int
+        totalOversInMatch: Int,
+        maxWickets: Int = 10
     ): ScoringResult {
         val updatedBalls = currentInnings.ballsHistory + ball
         return recalculateInnings(
@@ -24,7 +25,8 @@ class ScoringEngine {
             bowlingTeamId = currentInnings.bowlingTeamId,
             inningsNumber = currentInnings.inningsNumber,
             target = currentInnings.target,
-            totalOversInMatch = totalOversInMatch
+            totalOversInMatch = totalOversInMatch,
+            maxWickets = maxWickets
         )
     }
 
@@ -34,7 +36,8 @@ class ScoringEngine {
         bowlingTeamId: String,
         inningsNumber: Int,
         target: Int?,
-        totalOversInMatch: Int
+        totalOversInMatch: Int,
+        maxWickets: Int = 10
     ): ScoringResult {
         var totalRuns = 0
         var totalWickets = 0
@@ -93,7 +96,11 @@ class ScoringEngine {
             }
 
             // Batter Stats update
-            val currentBatter = battersMap[ball.strikerId] ?: BatterScore(playerId = ball.strikerId, name = ball.strikerId)
+            val strikerKey = battersMap.keys.find { it == ball.strikerId }
+                ?: battersMap.entries.find { it.value.name == ball.strikerId || it.value.playerId == ball.strikerId }?.key
+                ?: ball.strikerId
+
+            val currentBatter = battersMap[strikerKey] ?: BatterScore(playerId = ball.strikerId, name = ball.strikerId)
             val updatedBatter = currentBatter.copy(
                 name = if (currentBatter.name.isNotBlank()) currentBatter.name else ball.strikerId,
                 runs = currentBatter.runs + runsScored,
@@ -101,10 +108,24 @@ class ScoringEngine {
                 fours = if (runsScored == 4 && extraType == ExtraType.NONE) currentBatter.fours + 1 else currentBatter.fours,
                 sixes = if (runsScored == 6 && extraType == ExtraType.NONE) currentBatter.sixes + 1 else currentBatter.sixes
             )
-            battersMap[ball.strikerId] = updatedBatter
+            battersMap[strikerKey] = updatedBatter
+
+            // Ensure non-striker exists in battersMap
+            if (ball.nonStrikerId.isNotBlank()) {
+                val nonStrikerKey = battersMap.keys.find { it == ball.nonStrikerId }
+                    ?: battersMap.entries.find { it.value.name == ball.nonStrikerId || it.value.playerId == ball.nonStrikerId }?.key
+                    ?: ball.nonStrikerId
+                if (!battersMap.containsKey(nonStrikerKey)) {
+                    battersMap[nonStrikerKey] = BatterScore(playerId = ball.nonStrikerId, name = ball.nonStrikerId)
+                }
+            }
 
             // Bowler Stats update
-            val currentBowler = bowlersMap[ball.bowlerId] ?: BowlerScore(playerId = ball.bowlerId, name = ball.bowlerId)
+            val bowlerKey = bowlersMap.keys.find { it == ball.bowlerId }
+                ?: bowlersMap.entries.find { it.value.name == ball.bowlerId || it.value.playerId == ball.bowlerId }?.key
+                ?: ball.bowlerId
+
+            val currentBowler = bowlersMap[bowlerKey] ?: BowlerScore(playerId = ball.bowlerId, name = ball.bowlerId)
             val bowlerRunsThisBall = when (extraType) {
                 ExtraType.BYE, ExtraType.LEG_BYE -> 0
                 else -> totalBallRuns
@@ -119,27 +140,30 @@ class ScoringEngine {
                 wides = if (extraType == ExtraType.WIDE) currentBowler.wides + extraRuns else currentBowler.wides,
                 noBalls = if (extraType == ExtraType.NO_BALL) currentBowler.noBalls + extraRuns else currentBowler.noBalls
             )
-            bowlersMap[ball.bowlerId] = updatedBowler
+            bowlersMap[bowlerKey] = updatedBowler
 
             currentPartnershipRuns += totalBallRuns
 
             // Handle Wicket
             if (ball.wicketType != WicketType.NONE) {
                 totalWickets++
-                val dismissedId = ball.dismissedPlayerId ?: ball.strikerId
+                val rawDismissedId = ball.dismissedPlayerId ?: ball.strikerId
+                val dismissedKey = battersMap.keys.find { it == rawDismissedId }
+                    ?: battersMap.entries.find { it.value.name == rawDismissedId || it.value.playerId == rawDismissedId }?.key
+                    ?: rawDismissedId
 
                 // Mark dismissed batter
-                val dismissedBatter = battersMap[dismissedId] ?: BatterScore(playerId = dismissedId, name = dismissedId)
-                battersMap[dismissedId] = dismissedBatter.copy(
-                    name = if (dismissedBatter.name.isNotBlank()) dismissedBatter.name else dismissedId,
+                val dismissedBatter = battersMap[dismissedKey] ?: BatterScore(playerId = rawDismissedId, name = rawDismissedId)
+                battersMap[dismissedKey] = dismissedBatter.copy(
+                    name = if (dismissedBatter.name.isNotBlank()) dismissedBatter.name else rawDismissedId,
                     isOut = true,
                     dismissalInfo = "${ball.wicketType.name.lowercase()} b ${ball.bowlerId}"
                 )
 
                 // Bowler gets credit for wicket if not run out / retired out
                 if (ball.wicketType != WicketType.RUN_OUT && ball.wicketType != WicketType.RETIRED_OUT) {
-                    val wBowler = bowlersMap[ball.bowlerId]!!
-                    bowlersMap[ball.bowlerId] = wBowler.copy(wickets = wBowler.wickets + 1)
+                    val wBowler = bowlersMap[bowlerKey]!!
+                    bowlersMap[bowlerKey] = wBowler.copy(wickets = wBowler.wickets + 1)
                 }
 
                 // Record Fall of Wicket
@@ -149,7 +173,7 @@ class ScoringEngine {
                         wicketNumber = totalWickets,
                         score = totalRuns,
                         oversFormatted = oversStr,
-                        dismissedPlayerName = dismissedId
+                        dismissedPlayerName = rawDismissedId
                     )
                 )
 
@@ -212,7 +236,7 @@ class ScoringEngine {
 
         // Check if innings complete
         val isTargetReached = target != null && totalRuns >= target
-        val isAllOut = totalWickets >= 10
+        val isAllOut = totalWickets >= maxWickets
         val isOversExhausted = totalLegalBalls >= maxLegalBalls
         val isInningsComplete = isTargetReached || isAllOut || isOversExhausted
 

@@ -31,7 +31,6 @@ import com.cricpro.app.domain.model.ExtraType
 import com.cricpro.app.domain.model.Player
 import com.cricpro.app.domain.model.WicketType
 import com.cricpro.app.presentation.components.AdBanner
-import com.cricpro.app.presentation.components.WagonWheelCanvas
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,13 +45,19 @@ fun LiveScoringScreen(
 
     val uiState by viewModel.uiState.collectAsState()
     val match = uiState.currentMatch
-    fun isTeamA(idOrName: String?, teamA: com.cricpro.app.domain.model.Team?): Boolean {
-        if (idOrName.isNullOrBlank() || teamA == null) return true
-        return idOrName == teamA.teamId || (teamA.teamName.isNotBlank() && idOrName.equals(teamA.teamName, ignoreCase = true))
+    fun isTeamA(idOrName: String?, teamA: com.cricpro.app.domain.model.Team?, teamB: com.cricpro.app.domain.model.Team?): Boolean {
+        if (idOrName.isNullOrBlank()) return true
+        if (teamB != null && (idOrName == teamB.teamId || (teamB.teamName.isNotBlank() && idOrName.equals(teamB.teamName, ignoreCase = true)))) {
+            return false
+        }
+        if (teamA != null && (idOrName == teamA.teamId || (teamA.teamName.isNotBlank() && idOrName.equals(teamA.teamName, ignoreCase = true)))) {
+            return true
+        }
+        return true
     }
 
     val currentInnings = if (match?.currentInningsNumber == 1) match?.firstInnings else match?.secondInnings
-    val isBattingTeamA = isTeamA(currentInnings?.battingTeamId, match?.teamA)
+    val isBattingTeamA = isTeamA(currentInnings?.battingTeamId, match?.teamA, match?.teamB)
     val battingTeam = if (isBattingTeamA) match?.teamA else match?.teamB
     val bowlingTeam = if (isBattingTeamA) match?.teamB else match?.teamA
 
@@ -214,8 +219,14 @@ fun LiveScoringScreen(
                     HorizontalDivider(color = Color(0xFFE7E0EC))
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    val strikerScore = currentInnings?.batters?.get(match?.currentStrikerId)
-                    val nonStrikerScore = currentInnings?.batters?.get(match?.currentNonStrikerId)
+                    fun getBatterScore(name: String?): BatterScore? {
+                        if (name.isNullOrBlank()) return null
+                        return currentInnings?.batters?.get(name)
+                            ?: currentInnings?.batters?.values?.find { it.name == name || it.playerId == name }
+                    }
+
+                    val strikerScore = getBatterScore(match?.currentStrikerId)
+                    val nonStrikerScore = getBatterScore(match?.currentNonStrikerId)
 
                     // Striker Row
                     Row(
@@ -475,21 +486,6 @@ fun LiveScoringScreen(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("Undo Last Ball", fontWeight = FontWeight.Bold)
                     }
-                }
-            }
-
-            // Wagon Wheel Canvas Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFF3EDF7)),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(modifier = Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Wagon Wheel / Shot Placement", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF49454F))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    WagonWheelCanvas(
-                        balls = currentInnings?.ballsHistory ?: emptyList()
-                    )
                 }
             }
 

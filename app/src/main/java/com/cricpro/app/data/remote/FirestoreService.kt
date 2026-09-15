@@ -21,7 +21,11 @@ class FirestoreService @Inject constructor(
 
     suspend fun saveMatch(match: Match): Result<Unit> {
         return try {
-            firestore.collection("matches").document(match.matchId).set(match).await()
+            val prunedMatch = match.copy(
+                firstInnings = match.firstInnings?.copy(ballsHistory = emptyList()),
+                secondInnings = match.secondInnings?.copy(ballsHistory = emptyList())
+            )
+            firestore.collection("matches").document(prunedMatch.matchId).set(prunedMatch).await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
