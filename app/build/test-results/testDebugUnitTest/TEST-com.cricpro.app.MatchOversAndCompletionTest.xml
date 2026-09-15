@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.cricpro.app.MatchOversAndCompletionTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-09-15T08:52:11.088Z" hostname="MSI" time="0.029">
+  <properties/>
+  <testcase name="testWidesAndNoBallsDoNotCountTowardsLegalOversLimit" classname="com.cricpro.app.MatchOversAndCompletionTest" time="0.002"/>
+  <testcase name="testEntityToDomainScorePreservation" classname="com.cricpro.app.MatchOversAndCompletionTest" time="0.02"/>
+  <testcase name="testMatchStatusFilteringMutuallyExclusive" classname="com.cricpro.app.MatchOversAndCompletionTest" time="0.001"/>
+  <testcase name="testSecondInningsDefendTargetWinByRuns" classname="com.cricpro.app.MatchOversAndCompletionTest" time="0.0"/>
+  <testcase name="testFirstInningsOversLimitCompletionAt12LegalBalls" classname="com.cricpro.app.MatchOversAndCompletionTest" time="0.001"/>
+  <testcase name="testAllOut10WicketsCompletesInningsEarly" classname="com.cricpro.app.MatchOversAndCompletionTest" time="0.001"/>
+  <testcase name="testSecondInningsTargetReached" classname="com.cricpro.app.MatchOversAndCompletionTest" time="0.001"/>
+  <testcase name="testLastCompletedMatchComesFirstInCompletedMatches" classname="com.cricpro.app.MatchOversAndCompletionTest" time="0.002"/>
+  <testcase name="testEntityToDomainPlayerSelectionPreservation" classname="com.cricpro.app.MatchOversAndCompletionTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
