@@ -22,7 +22,8 @@ data class ScoringUiState(
     val selectedExtraType: ExtraType = ExtraType.NONE,
     val selectedWicketType: WicketType = WicketType.NONE,
     val wagonWheelAngle: Float = 0f,
-    val showInningsBreakDialog: Boolean = false
+    val showInningsBreakDialog: Boolean = false,
+    val showMatchCompletedDialog: Boolean = false
 )
 
 @HiltViewModel
@@ -38,6 +39,7 @@ class ScoringViewModel @Inject constructor(
 
     private val matchId: String = savedStateHandle.get<String>("matchId") ?: ""
     private var hasUserDismissedInningsBreak = false
+    private var hasUserDismissedMatchCompleted = false
 
     private val _overrideBowlerId = MutableStateFlow<String?>(null)
     private val _overrideStrikerId = MutableStateFlow<String?>(null)
@@ -70,7 +72,7 @@ class ScoringViewModel @Inject constructor(
                     if (rawMatch == null) null
                     else {
                         val tA = teams.find { it.teamId == rawMatch.teamA.teamId || (it.teamName.equals(rawMatch.teamA.teamName, ignoreCase = true) && rawMatch.teamA.teamName.isNotBlank()) } ?: rawMatch.teamA
-                        val tB = teams.find { it.teamId == rawMatch.teamB.teamId || (it.teamName.equals(rawMatch.teamB.teamName, ignoreCase = true) && rawMatch.teamB.teamName.isNotBlank()) } ?: rawMatch.teamB
+                        val tB = teams.find { (it.teamId == rawMatch.teamB.teamId || (it.teamName.equals(rawMatch.teamB.teamName, ignoreCase = true) && rawMatch.teamB.teamName.isNotBlank())) && (tA.teamId.isBlank() || it.teamId != tA.teamId) } ?: rawMatch.teamB
                         val fullMatch = rawMatch.copy(teamA = tA, teamB = tB)
                         Triple(fullMatch, balls1, balls2)
                     }
@@ -163,6 +165,11 @@ class ScoringViewModel @Inject constructor(
                         } else {
                             resultMsg = "Match Tied!"
                         }
+                    }
+
+                    var showMatchCompleted = false
+                    if (mStatus == MatchStatus.COMPLETED && !hasUserDismissedMatchCompleted) {
+                        showMatchCompleted = true
                     }
 
                     val activeRes = if (activeInningsNum == 1) res1 else res2
@@ -278,8 +285,27 @@ class ScoringViewModel @Inject constructor(
                     val defaultBowlerToUse = if (isSecondInningsNoBalls && _overrideBowlerId.value == null && match.currentBowlerId.isNullOrBlank()) defaultBowler else null
 
                     val currentStriker = defaultStrikerToUse ?: resolvedStriker ?: defaultStriker
-                    val currentNonStriker = defaultNonStrikerToUse ?: resolvedNonStriker ?: defaultNonStriker
-                    val currentBowler = defaultBowlerToUse ?: activeBowlerFromStream ?: defaultBowler
+
+                    var currentNonStriker = defaultNonStrikerToUse ?: resolvedNonStriker ?: defaultNonStriker
+                    if (currentNonStriker == currentStriker) {
+                        val altNonStriker = squadNames.find { it != currentStriker && getBatterScore(it)?.isOut != true }
+                            ?: findNextIncomingBatter(currentStriker)
+                            ?: if (batTeamActive.teamName.isNotBlank()) "${batTeamActive.teamName} Player 2" else "Player 2"
+                        currentNonStriker = altNonStriker
+                    }
+
+                    var currentBowler = defaultBowlerToUse ?: activeBowlerFromStream ?: defaultBowler
+                    if (currentBowler == currentStriker || currentBowler == currentNonStriker) {
+                        _overrideBowlerId.value = null
+                        val bowlSquad = if (bowlTeamActive.players.isNotEmpty()) {
+                            bowlTeamActive.players.map { it.name }
+                        } else {
+                            (1..11).map { if (bowlTeamActive.teamName.isNotBlank()) "${bowlTeamActive.teamName} Bowler $it" else "Bowler $it" }
+                        }
+                        val validBowler = bowlSquad.find { it != currentStriker && it != currentNonStriker }
+                            ?: if (bowlTeamActive.teamName.isNotBlank()) "${bowlTeamActive.teamName} Bowler 1" else "Bowler 1"
+                        currentBowler = validBowler
+                    }
 
                     val isMatchJustCompleted = (mStatus == MatchStatus.COMPLETED)
                     val finalMatchDate = if (isMatchJustCompleted && match.status != MatchStatus.COMPLETED) System.currentTimeMillis() else match.matchDate
@@ -300,7 +326,8 @@ class ScoringViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(
                         currentMatch = updatedMatch,
                         isLoading = false,
-                        showInningsBreakDialog = showInningsBreak
+                        showInningsBreakDialog = showInningsBreak,
+                        showMatchCompletedDialog = showMatchCompleted
                     )
 
                     if (updatedMatch.status != match.status ||
@@ -323,6 +350,7 @@ class ScoringViewModel @Inject constructor(
     fun scoreRuns(runs: Int, extraType: ExtraType = ExtraType.NONE, wicketType: WicketType = WicketType.NONE) {
         _overrideStrikerId.value = null
         _overrideNonStrikerId.value = null
+        _overrideBowlerId.value = null
 
         val baseMatch = uiState.value.currentMatch ?: Match(
             matchId = matchId.ifEmpty { "match_${System.currentTimeMillis()}" },
@@ -399,24 +427,27 @@ class ScoringViewModel @Inject constructor(
     }
 
     fun selectStriker(name: String) {
-        _overrideStrikerId.value = name
         val match = uiState.value.currentMatch ?: return
+        if (name == match.currentNonStrikerId || name == match.currentBowlerId) return
+        _overrideStrikerId.value = name
         val updated = match.copy(currentStrikerId = name, updatedAt = System.currentTimeMillis())
         _uiState.value = _uiState.value.copy(currentMatch = updated)
         viewModelScope.launch { scoringRepository.syncInningsState(match.matchId, updated) }
     }
 
     fun selectNonStriker(name: String) {
-        _overrideNonStrikerId.value = name
         val match = uiState.value.currentMatch ?: return
+        if (name == match.currentStrikerId || name == match.currentBowlerId) return
+        _overrideNonStrikerId.value = name
         val updated = match.copy(currentNonStrikerId = name, updatedAt = System.currentTimeMillis())
         _uiState.value = _uiState.value.copy(currentMatch = updated)
         viewModelScope.launch { scoringRepository.syncInningsState(match.matchId, updated) }
     }
 
     fun selectBowler(name: String) {
-        _overrideBowlerId.value = name
         val match = uiState.value.currentMatch ?: return
+        if (name == match.currentStrikerId || name == match.currentNonStrikerId) return
+        _overrideBowlerId.value = name
         val updated = match.copy(currentBowlerId = name, updatedAt = System.currentTimeMillis())
         _uiState.value = _uiState.value.copy(currentMatch = updated)
         viewModelScope.launch { scoringRepository.syncInningsState(match.matchId, updated) }
@@ -472,5 +503,14 @@ class ScoringViewModel @Inject constructor(
 
     fun openInningsBreakDialog() {
         _uiState.value = _uiState.value.copy(showInningsBreakDialog = true)
+    }
+
+    fun dismissMatchCompletedDialog() {
+        hasUserDismissedMatchCompleted = true
+        _uiState.value = _uiState.value.copy(showMatchCompletedDialog = false)
+    }
+
+    fun openMatchCompletedDialog() {
+        _uiState.value = _uiState.value.copy(showMatchCompletedDialog = true)
     }
 }

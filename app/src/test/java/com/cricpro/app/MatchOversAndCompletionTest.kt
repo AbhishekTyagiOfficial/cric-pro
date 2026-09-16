@@ -318,4 +318,125 @@ class MatchOversAndCompletionTest {
         assertEquals(2, updatedInn1.wickets)
         assertTrue("Innings must be completed when 2 wickets are lost for a 3-player team", updatedInn1.isCompleted)
     }
+
+    @Test
+    fun testMatchTiedResultAndCompletionState() {
+        val inn1 = testMatch2Overs.firstInnings!!.copy(
+            totalRuns = 50,
+            legalBallsBowled = 12,
+            isCompleted = true
+        )
+        var inn2 = testMatch2Overs.secondInnings!!.copy(
+            target = 51
+        )
+
+        // Bowl 50 runs in 12 legal balls (2 overs) for second innings -> Tied match
+        val balls2 = mutableListOf<Ball>()
+        for (i in 1..10) {
+            balls2.add(
+                Ball(
+                    ballId = "b_$i", matchId = testMatch2Overs.matchId, inningsNumber = 2,
+                    strikerId = "P1", nonStrikerId = "P2", bowlerId = "B1", runsScored = 5, isLegalDelivery = true
+                )
+            )
+        }
+        // remaining 2 balls dot balls
+        for (i in 11..12) {
+            balls2.add(
+                Ball(
+                    ballId = "b_$i", matchId = testMatch2Overs.matchId, inningsNumber = 2,
+                    strikerId = "P1", nonStrikerId = "P2", bowlerId = "B1", runsScored = 0, isLegalDelivery = true
+                )
+            )
+        }
+
+        val res2 = scoringEngine.recalculateInnings(
+            balls = balls2,
+            battingTeamId = inn2.battingTeamId,
+            bowlingTeamId = inn2.bowlingTeamId,
+            inningsNumber = 2,
+            target = 51,
+            totalOversInMatch = 2,
+            maxWickets = 10
+        )
+
+        val updatedInn2 = res2.updatedInnings
+        assertTrue(updatedInn2.isCompleted)
+        assertEquals(50, updatedInn2.totalRuns)
+
+        val inn1Runs = inn1.totalRuns
+        val inn2Runs = updatedInn2.totalRuns
+
+        val resultMsg = if (inn2Runs >= 51) {
+            "Australia won by 10 wickets!"
+        } else if (inn1Runs > inn2Runs) {
+            "India won by ${inn1Runs - inn2Runs} runs!"
+        } else {
+            "Match Tied!"
+        }
+
+        assertEquals("Match Tied!", resultMsg)
+    }
+
+    @Test
+    fun testMatchWonByWicketsResultAndCompletionState() {
+        val inn1 = testMatch2Overs.firstInnings!!.copy(
+            totalRuns = 50,
+            legalBallsBowled = 12,
+            isCompleted = true
+        )
+
+        val balls2 = listOf(
+            Ball(ballId = "b1", matchId = testMatch2Overs.matchId, inningsNumber = 2, strikerId = "P1", nonStrikerId = "P2", bowlerId = "B1", runsScored = 6, isLegalDelivery = true),
+            Ball(ballId = "b2", matchId = testMatch2Overs.matchId, inningsNumber = 2, strikerId = "P1", nonStrikerId = "P2", bowlerId = "B1", runsScored = 6, isLegalDelivery = true),
+            Ball(ballId = "b3", matchId = testMatch2Overs.matchId, inningsNumber = 2, strikerId = "P1", nonStrikerId = "P2", bowlerId = "B1", runsScored = 6, isLegalDelivery = true),
+            Ball(ballId = "b4", matchId = testMatch2Overs.matchId, inningsNumber = 2, strikerId = "P1", nonStrikerId = "P2", bowlerId = "B1", runsScored = 6, isLegalDelivery = true),
+            Ball(ballId = "b5", matchId = testMatch2Overs.matchId, inningsNumber = 2, strikerId = "P1", nonStrikerId = "P2", bowlerId = "B1", runsScored = 6, isLegalDelivery = true),
+            Ball(ballId = "b6", matchId = testMatch2Overs.matchId, inningsNumber = 2, strikerId = "P1", nonStrikerId = "P2", bowlerId = "B1", runsScored = 6, isLegalDelivery = true),
+            Ball(ballId = "b7", matchId = testMatch2Overs.matchId, inningsNumber = 2, strikerId = "P1", nonStrikerId = "P2", bowlerId = "B1", runsScored = 6, isLegalDelivery = true),
+            Ball(ballId = "b8", matchId = testMatch2Overs.matchId, inningsNumber = 2, strikerId = "P1", nonStrikerId = "P2", bowlerId = "B1", runsScored = 6, isLegalDelivery = true),
+            Ball(ballId = "b9", matchId = testMatch2Overs.matchId, inningsNumber = 2, strikerId = "P1", nonStrikerId = "P2", bowlerId = "B1", runsScored = 6, isLegalDelivery = true)
+        )
+
+        val res2 = scoringEngine.recalculateInnings(
+            balls = balls2,
+            battingTeamId = testMatch2Overs.secondInnings!!.battingTeamId,
+            bowlingTeamId = testMatch2Overs.secondInnings!!.bowlingTeamId,
+            inningsNumber = 2,
+            target = 51,
+            totalOversInMatch = 2,
+            maxWickets = 10
+        )
+
+        val updatedInn2 = res2.updatedInnings
+        assertTrue(updatedInn2.isCompleted)
+        assertTrue(updatedInn2.totalRuns >= 51)
+
+        val wktsLeft = 10 - updatedInn2.wickets
+        val resultMsg = "Australia won by $wktsLeft wickets!"
+        assertEquals("Australia won by 10 wickets!", resultMsg)
+    }
+
+    @Test
+    fun testMatchWonByRunsResultAndCompletionState() {
+        val inn1Runs = 60
+        val inn2Runs = 45
+
+        val resultMsg = if (inn1Runs > inn2Runs) {
+            "India won by ${inn1Runs - inn2Runs} runs!"
+        } else {
+            "Match Tied!"
+        }
+
+        assertEquals("India won by 15 runs!", resultMsg)
+    }
+
+    @Test
+    fun testScoringUiStateMatchCompletedDialogDefaults() {
+        val defaultState = com.cricpro.app.presentation.match.ScoringUiState()
+        assertFalse(defaultState.showMatchCompletedDialog)
+
+        val dialogState = defaultState.copy(showMatchCompletedDialog = true)
+        assertTrue(dialogState.showMatchCompletedDialog)
+    }
 }

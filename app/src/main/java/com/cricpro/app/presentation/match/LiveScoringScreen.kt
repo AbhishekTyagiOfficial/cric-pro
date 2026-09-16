@@ -144,6 +144,68 @@ fun LiveScoringScreen(
         ) {
             Spacer(modifier = Modifier.height(2.dp))
 
+            if (isMatchCompleted) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "MATCH COMPLETED",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = Color(0xFF2E7D32)
+                        )
+                        Text(
+                            text = match?.resultMessage.takeIf { !it.isNullOrBlank() } ?: "Match Completed!",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 18.sp,
+                            color = Color(0xFF1B5E20),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = { viewModel.openMatchCompletedDialog() },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = "Match Summary",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    maxLines = 1
+                                )
+                            }
+                            OutlinedButton(
+                                onClick = onNavigateToScorecard,
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF1B5E20)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1B5E20)),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = "Full Scorecard",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Match Header Banner (Green Card as in user screenshot)
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -526,6 +588,7 @@ fun LiveScoringScreen(
             currentSelected = match?.currentStrikerId ?: "Player 1",
             currentStriker = match?.currentStrikerId,
             currentNonStriker = match?.currentNonStrikerId,
+            previousBowler = match?.currentBowlerId,
             existingBatters = currentInnings?.batters ?: emptyMap(),
             onPlayerSelected = { viewModel.selectStriker(it); showStrikerDialog = false },
             onDismiss = { showStrikerDialog = false }
@@ -540,6 +603,7 @@ fun LiveScoringScreen(
             currentSelected = match?.currentNonStrikerId ?: "Player 2",
             currentStriker = match?.currentStrikerId,
             currentNonStriker = match?.currentNonStrikerId,
+            previousBowler = match?.currentBowlerId,
             existingBatters = currentInnings?.batters ?: emptyMap(),
             onPlayerSelected = { viewModel.selectNonStriker(it); showNonStrikerDialog = false },
             onDismiss = { showNonStrikerDialog = false }
@@ -553,6 +617,8 @@ fun LiveScoringScreen(
             teamName = bowlingTeamName,
             teamPlayers = bowlingPlayers,
             currentSelected = match?.currentBowlerId ?: "Bowler 1",
+            currentStriker = match?.currentStrikerId,
+            currentNonStriker = match?.currentNonStrikerId,
             previousBowler = match?.currentBowlerId,
             onPlayerSelected = { viewModel.selectBowler(it); showBowlerDialog = false },
             onDismiss = { showBowlerDialog = false }
@@ -593,6 +659,154 @@ fun LiveScoringScreen(
             }
         )
     }
+
+    if (uiState.showMatchCompletedDialog) {
+        val inn1 = match?.firstInnings
+        val inn2 = match?.secondInnings
+        val isTied = match?.resultMessage?.contains("Tied", ignoreCase = true) == true ||
+                     (inn1 != null && inn2 != null && inn1.totalRuns == inn2.totalRuns && inn2.isCompleted)
+        val dialogTitle = if (isTied) "Match Tied!" else "Match Completed!"
+        val resultMessage = match?.resultMessage.takeIf { !it.isNullOrBlank() }
+            ?: if (isTied) "Match Tied!" else "Match Completed!"
+
+        val team1Name = match?.teamA?.teamName.takeIf { !it.isNullOrBlank() } ?: "Team A"
+        val team2Name = match?.teamB?.teamName.takeIf { !it.isNullOrBlank() } ?: "Team B"
+
+        val inn1BattingName = if (inn1?.battingTeamId == match?.teamA?.teamId) team1Name else team2Name
+        val inn2BattingName = if (inn2?.battingTeamId == match?.teamA?.teamId) team1Name else team2Name
+
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissMatchCompletedDialog() },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.EmojiEvents,
+                        contentDescription = null,
+                        tint = Color(0xFFFFB300),
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Text(
+                        text = dialogTitle,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp,
+                        color = Color(0xFF1B5E20)
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = resultMessage,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF1B5E20)
+                            )
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF3EDF7)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Match Summary",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            if (inn1 != null) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "$inn1BattingName (1st Inn):",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp
+                                    )
+                                    Text(
+                                        text = "${inn1.totalRuns}/${inn1.wickets} (${inn1.oversFormatted} ov)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+
+                            if (inn2 != null) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "$inn2BattingName (2nd Inn):",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp
+                                    )
+                                    Text(
+                                        text = "${inn2.totalRuns}/${inn2.wickets} (${inn2.oversFormatted} ov)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.dismissMatchCompletedDialog()
+                        onNavigateToScorecard()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ReceiptLong,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("View Scorecard", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = {
+                        viewModel.dismissMatchCompletedDialog()
+                        onNavigateToHome()
+                    }
+                ) {
+                    Text("Go to Home")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -620,7 +834,7 @@ fun PlayerSelectionDialog(
                 val availablePlayers = if (teamPlayers.isNotEmpty()) {
                     teamPlayers.map { it.name }
                 } else {
-                    List(11) { "Player ${it + 1}" }
+                    List(11) { if (teamName.isNotBlank()) "$teamName Player ${it + 1}" else "Player ${it + 1}" }
                 }
                 LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
                     items(availablePlayers) { player ->
