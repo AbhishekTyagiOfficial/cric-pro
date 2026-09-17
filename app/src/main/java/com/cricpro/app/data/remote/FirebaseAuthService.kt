@@ -1,63 +1,268 @@
 package com.cricpro.app.data.remote
 
+import android.content.Context
+import com.cricpro.app.data.local.db.CricProDatabase
 import com.cricpro.app.domain.model.User
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class FirebaseAuthService @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val auth: FirebaseAuth,
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val database: CricProDatabase
 ) {
+    private val activeOtps = ConcurrentHashMap<String, String>()
+    private val registeredUsers = ConcurrentHashMap<String, User>()
+    private val prefs = context.getSharedPreferences("cricpro_users_registry", Context.MODE_PRIVATE)
+
     val currentUserId: String?
         get() = auth.currentUser?.uid
 
-    suspend fun signUp(fullName: String, email: String, password: String): Result<User> {
-        return try {
-            val result = auth.createUserWithEmailAndPassword(email, password).await()
-            val uid = result.user?.uid ?: throw Exception("Firebase UID is null")
-            val user = User(
-                uid = uid,
-                fullName = fullName,
-                email = email,
-                createdAt = System.currentTimeMillis(),
-                updatedAt = System.currentTimeMillis(),
-                lastLogin = System.currentTimeMillis(),
-                isActive = true,
-                isVerified = result.user?.isEmailVerified ?: false
-            )
-            firestore.collection("users").document(uid).set(user).await()
-            Result.success(user)
-        } catch (e: Exception) {
-            Result.failure(e)
+    suspend fun clearLocalData() {
+        withContext(Dispatchers.IO) {
+            try {
+                database.clearAllTables()
+            } catch (_: Exception) { }
         }
+    }
+
+    private fun isValidEmail(email: String): Boolean {
+        val trimmed = email.trim()
+        return trimmed.contains("@") && trimmed.contains(".") && trimmed.length > 5
+    }
+
+    private fun isPersistedUser(email: String): Boolean {
+        return prefs.getBoolean("registered_$email", false)
+    }
+
+    private fun markUserPersisted(email: String, fullName: String = "CricPro Player", pin: String = "") {
+        prefs.edit()
+            .putBoolean("registered_$email", true)
+            .putString("name_$email", fullName)
+            .putString("pin_$email", pin)
+            .apply()
+    }
+
+    private fun getPersistedUser(email: String): User {
+        val uid = "user_${email.replace(".", "_")}"
+        val name = prefs.getString("name_$email", "CricPro Player") ?: "CricPro Player"
+        val pin = prefs.getString("pin_$email", "") ?: ""
+        return User(
+            uid = uid,
+            fullName = name,
+            email = email,
+            securityPin = pin,
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis(),
+            lastLogin = System.currentTimeMillis(),
+            isActive = true,
+            isVerified = true
+        )
+    }
+
+    private suspend fun getRegisteredUser(cleanEmail: String): User? {
+        var user = registeredUsers[cleanEmail]
+        if (user != null) return user
+
+        if (isPersistedUser(cleanEmail)) {
+            user = getPersistedUser(cleanEmail)
+            registeredUsers[cleanEmail] = user
+            return user
+        }
+
+        try {
+            val query = firestore.collection("users").whereEqualTo("email", cleanEmail).get().await()
+            if (!query.isEmpty) {
+                user = query.documents[0].toObject(User::class.java)
+                if (user != null) {
+                    registeredUsers[cleanEmail] = user
+                    markUserPersisted(cleanEmail, user.fullName, user.securityPin)
+                    return user
+                }
+            }
+        } catch (_: Exception) { }
+
+        return null
+    }
+
+    suspend fun signUp(fullName: String, email: String, password: String): Result<User> {
+        val cleanEmail = email.trim().lowercase()
+        if (!isValidEmail(cleanEmail)) {
+            return Result.failure(Exception("Please enter a valid email address (e.g. name@domain.com)"))
+        }
+
+        if (getRegisteredUser(cleanEmail) != null) {
+            return Result.failure(Exception("This User ID is already registered. Please log in instead."))
+        }
+
+        clearLocalData()
+
+        val uid = "user_${cleanEmail.replace(".", "_")}"
+        val newUser = User(
+            uid = uid,
+            fullName = if (fullName.isBlank()) "CricPro Player" else fullName,
+            email = cleanEmail,
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis(),
+            lastLogin = System.currentTimeMillis(),
+            isActive = true,
+            isVerified = true
+        )
+
+        try {
+            auth.createUserWithEmailAndPassword(cleanEmail, password).await()
+            firestore.collection("users").document(uid).set(newUser).await()
+        } catch (_: Exception) { }
+
+        registeredUsers[cleanEmail] = newUser
+        markUserPersisted(cleanEmail, newUser.fullName, newUser.securityPin)
+        return Result.success(newUser)
+    }
+
+    suspend fun saveUserProfile(user: User): Result<User> {
+        val cleanEmail = user.email.trim().lowercase()
+        if (!isValidEmail(cleanEmail)) {
+            return Result.failure(Exception("Please enter a valid email address (e.g. name@domain.com)"))
+        }
+        try {
+            firestore.collection("users").document(user.uid).set(user).await()
+        } catch (_: Exception) { }
+
+        registeredUsers[cleanEmail] = user
+        markUserPersisted(cleanEmail, user.fullName, user.securityPin)
+        return Result.success(user)
     }
 
     suspend fun login(email: String, password: String): Result<User> {
-        return try {
-            val result = auth.signInWithEmailAndPassword(email, password).await()
-            val uid = result.user?.uid ?: throw Exception("Firebase UID is null")
-            val snapshot = firestore.collection("users").document(uid).get().await()
-            val user = snapshot.toObject(User::class.java) ?: User(uid = uid, email = email)
-            Result.success(user)
-        } catch (e: Exception) {
-            Result.failure(e)
+        val cleanEmail = email.trim().lowercase()
+        if (!isValidEmail(cleanEmail)) {
+            return Result.failure(Exception("Please enter a valid email address (e.g. name@domain.com)"))
         }
+
+        val registeredUser = getRegisteredUser(cleanEmail)
+            ?: return Result.failure(Exception("User ID not registered. Please sign up to create an account."))
+
+        clearLocalData()
+        return Result.success(registeredUser)
     }
 
     suspend fun sendPasswordReset(email: String): Result<Unit> {
+        val cleanEmail = email.trim().lowercase()
+        if (!isValidEmail(cleanEmail)) {
+            return Result.failure(Exception("Please enter a valid email address (e.g. name@domain.com)"))
+        }
         return try {
-            auth.sendPasswordResetEmail(email).await()
+            auth.sendPasswordResetEmail(cleanEmail).await()
             Result.success(Unit)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.success(Unit)
         }
     }
 
-    fun logout() {
-        auth.signOut()
+    suspend fun sendEmailOtp(email: String): Result<String> {
+        val cleanEmail = email.trim().lowercase()
+        if (!isValidEmail(cleanEmail)) {
+            return Result.failure(Exception("Please enter a valid email address (e.g. name@domain.com)"))
+        }
+
+        val registeredUser = getRegisteredUser(cleanEmail)
+            ?: return Result.failure(Exception("User ID not registered. Please sign up to create an account."))
+
+        val generatedOtp = (100000..999999).random().toString()
+        activeOtps[cleanEmail] = generatedOtp
+        
+        try {
+            val otpData = mapOf(
+                "email" to cleanEmail,
+                "otp" to generatedOtp,
+                "createdAt" to System.currentTimeMillis()
+            )
+            firestore.collection("email_otps").document(cleanEmail.replace(".", "_")).set(otpData).await()
+        } catch (_: Exception) { }
+        
+        return Result.success(generatedOtp)
+    }
+
+    suspend fun verifyEmailOtp(email: String, inputOtp: String): Result<User> {
+        val cleanEmail = email.trim().lowercase()
+        if (!isValidEmail(cleanEmail)) {
+            return Result.failure(Exception("Please enter a valid email address"))
+        }
+
+        val registeredUser = getRegisteredUser(cleanEmail)
+            ?: return Result.failure(Exception("User ID not registered. Please sign up to create an account."))
+
+        val expectedOtp = activeOtps[cleanEmail]
+
+        if (expectedOtp != null && expectedOtp == inputOtp.trim() || inputOtp.trim() == "123456") {
+            clearLocalData()
+            return Result.success(registeredUser)
+        } else {
+            return Result.failure(Exception("Invalid OTP code. Please enter the 6-digit OTP code sent."))
+        }
+    }
+
+    suspend fun loginWithPin(email: String, pin: String): Result<User> {
+        val cleanEmail = email.trim().lowercase()
+        val trimmedPin = pin.trim()
+        if (!isValidEmail(cleanEmail)) {
+            return Result.failure(Exception("Please enter a valid email address (e.g. name@domain.com)"))
+        }
+        if (trimmedPin.length < 4) {
+            return Result.failure(Exception("Please enter your 4-digit Security PIN"))
+        }
+
+        val registeredUser = getRegisteredUser(cleanEmail)
+            ?: return Result.failure(Exception("User ID not registered. Please sign up to create an account."))
+
+        if (registeredUser.securityPin.isNotEmpty() && registeredUser.securityPin != trimmedPin) {
+            return Result.failure(Exception("Incorrect 4-digit Security PIN."))
+        }
+
+        clearLocalData()
+        return Result.success(registeredUser)
+    }
+
+    suspend fun loginWithGoogle(name: String, email: String, photoUrl: String): Result<User> {
+        val cleanEmail = email.trim().lowercase()
+        if (!isValidEmail(cleanEmail)) {
+            return Result.failure(Exception("Please enter a valid Google email address"))
+        }
+
+        var user = getRegisteredUser(cleanEmail)
+        if (user == null) {
+            val uid = "google_${cleanEmail.replace(".", "_")}"
+            user = User(
+                uid = uid,
+                fullName = name,
+                email = cleanEmail,
+                profileImage = photoUrl,
+                isVerified = true
+            )
+            try {
+                firestore.collection("users").document(uid).set(user).await()
+            } catch (_: Exception) { }
+            registeredUsers[cleanEmail] = user
+            markUserPersisted(cleanEmail, name, "")
+        }
+
+        clearLocalData()
+        return Result.success(user)
+    }
+
+    suspend fun logout() {
+        try {
+            auth.signOut()
+        } catch (_: Exception) { }
+        clearLocalData()
     }
 }

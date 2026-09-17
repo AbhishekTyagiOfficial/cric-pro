@@ -1,12 +1,10 @@
 package com.cricpro.app.presentation.navigation
 
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.cricpro.app.presentation.auth.ForgotPasswordScreen
-import com.cricpro.app.presentation.auth.LoginScreen
-import com.cricpro.app.presentation.auth.SignUpScreen
+import com.cricpro.app.presentation.auth.*
 import com.cricpro.app.presentation.home.HomeScreen
 import com.cricpro.app.presentation.match.*
 import com.cricpro.app.presentation.search.SearchScreen
@@ -18,13 +16,34 @@ import com.cricpro.app.presentation.team.TeamListScreen
 import com.cricpro.app.presentation.tournament.TournamentListScreen
 
 @Composable
-fun CricProNavGraph(navController: NavHostController, startDestination: String = Screen.Login.route) {
+fun CricProNavGraph(
+    navController: NavHostController,
+    startDestination: String = Screen.Login.route
+) {
+    var showAuthBottomSheet by remember { mutableStateOf(false) }
+    var pendingGatedAction by remember { mutableStateOf("") }
+    var pendingRoute by remember { mutableStateOf<String?>(null) }
+
+    fun navigateOrGate(actionName: String, route: String) {
+        pendingGatedAction = actionName
+        pendingRoute = route
+        showAuthBottomSheet = true
+    }
+
     NavHost(navController = navController, startDestination = startDestination) {
         composable(Screen.Login.route) {
             LoginScreen(
                 onLoginSuccess = { navController.navigate(Screen.Home.route) { popUpTo(Screen.Login.route) { inclusive = true } } },
                 onNavigateToSignUp = { navController.navigate(Screen.SignUp.route) },
-                onNavigateToForgotPassword = { navController.navigate(Screen.ForgotPassword.route) }
+                onNavigateToForgotPassword = { navController.navigate(Screen.ForgotPassword.route) },
+                onNavigateToEmailOtp = { navController.navigate(Screen.EmailOtpVerification.route) }
+            )
+        }
+
+        composable(Screen.EmailOtpVerification.route) {
+            EmailOtpVerificationScreen(
+                onVerificationSuccess = { navController.navigate(Screen.Home.route) { popUpTo(Screen.Login.route) { inclusive = true } } },
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 
@@ -41,7 +60,7 @@ fun CricProNavGraph(navController: NavHostController, startDestination: String =
 
         composable(Screen.Home.route) {
             HomeScreen(
-                onNavigateToCreateMatch = { navController.navigate(Screen.CreateMatch.route) },
+                onNavigateToCreateMatch = { navigateOrGate("Create & Score Match", Screen.CreateMatch.route) },
                 onNavigateToTeams = { navController.navigate(Screen.Teams.route) },
                 onNavigateToTournaments = { navController.navigate(Screen.Tournaments.route) },
                 onNavigateToSearch = { navController.navigate(Screen.Search.route) },
@@ -127,5 +146,24 @@ fun CricProNavGraph(navController: NavHostController, startDestination: String =
         composable(Screen.AdminDashboard.route) {
             AdminDashboardScreen(onNavigateBack = { navController.popBackStack() })
         }
+    }
+
+    if (showAuthBottomSheet) {
+        AuthBottomSheet(
+            actionName = pendingGatedAction,
+            onDismiss = { showAuthBottomSheet = false },
+            onNavigateToLogin = {
+                showAuthBottomSheet = false
+                navController.navigate(Screen.Login.route)
+            },
+            onNavigateToSignUp = {
+                showAuthBottomSheet = false
+                navController.navigate(Screen.SignUp.route)
+            },
+            onGoogleSignIn = {
+                showAuthBottomSheet = false
+                pendingRoute?.let { navController.navigate(it) }
+            }
+        )
     }
 }

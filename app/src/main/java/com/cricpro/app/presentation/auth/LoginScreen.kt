@@ -1,7 +1,9 @@
 package com.cricpro.app.presentation.auth
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,66 +19,133 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onNavigateToSignUp: () -> Unit,
     onNavigateToForgotPassword: () -> Unit,
+    onNavigateToEmailOtp: () -> Unit,
     viewModel: AuthViewModel = hiltViewModel()
 ) {
+    var selectedTab by remember { mutableStateOf(0) } // 0: Password, 1: Email OTP, 2: Security PIN
+    
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var securityPin by remember { mutableStateOf("") }
+
     val authState by viewModel.authState.collectAsState()
 
     LaunchedEffect(authState) {
         if (authState is AuthState.Success) {
             onLoginSuccess()
+        } else if (authState is AuthState.OtpSent) {
+            onNavigateToEmailOtp()
         }
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Text("CricPro", fontSize = 36.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             Text("Cricket Scoring & Tournament Platform", fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f))
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Quick Google Sign-In Button
+            Button(
+                onClick = {
+                    val dummyName = "Google Player"
+                    val googleEmail = email.trim()
+                    viewModel.loginWithGoogle(dummyName, googleEmail, "")
+                },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            ) {
+                Text("🚀 1-Tap Google Sign-In (Free)", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Tabs for Password, Free Email OTP, and Security PIN
+            TabRow(selectedTabIndex = selectedTab) {
+                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0; viewModel.resetState() }, text = { Text("Password") })
+                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1; viewModel.resetState() }, text = { Text("Email OTP") })
+                Tab(selected = selectedTab == 2, onClick = { selectedTab = 2; viewModel.resetState() }, text = { Text("Security PIN") })
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
 
             OutlinedTextField(
                 value = email,
-                onValueChange = { email = it },
-                label = { Text("Email") },
+                onValueChange = { email = it; if (authState is AuthState.Error) viewModel.resetState() },
+                label = { Text("Email Address (e.g. player@domain.com)") },
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("Password") },
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            TextButton(
-                onClick = onNavigateToForgotPassword,
-                modifier = Modifier.align(Alignment.End)
-            ) {
-                Text("Forgot Password?")
+            when (selectedTab) {
+                0 -> {
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Password") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    TextButton(
+                        onClick = onNavigateToForgotPassword,
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text("Forgot Password?")
+                    }
+                }
+                1 -> {
+                    Text(
+                        text = "We will generate and send a 6-digit OTP code to your email for free.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    )
+                }
+                2 -> {
+                    OutlinedTextField(
+                        value = securityPin,
+                        onValueChange = { if (it.length <= 4) securityPin = it },
+                        label = { Text("4-Digit Security PIN") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             if (authState is AuthState.Loading) {
                 CircularProgressIndicator()
             } else {
                 Button(
-                    onClick = { viewModel.login(email, password) },
+                    onClick = {
+                        when (selectedTab) {
+                            0 -> viewModel.login(email, password)
+                            1 -> viewModel.sendEmailOtp(email)
+                            2 -> viewModel.loginWithPin(email, securityPin)
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Login", fontSize = 16.sp)
+                    Text(
+                        text = when (selectedTab) {
+                            0 -> "Login with Password"
+                            1 -> "Send Free Email OTP"
+                            else -> "Sign In with PIN"
+                        },
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -86,13 +155,17 @@ fun LoginScreen(
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Continue as Guest (Skip Sign-In)", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Continue as Guest (Browse Only)", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
 
             if (authState is AuthState.Error) {
                 Spacer(modifier = Modifier.height(12.dp))
-                Text((authState as AuthState.Error).message, color = MaterialTheme.colorScheme.error)
+                Text(
+                    text = (authState as AuthState.Error).message,
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
 
             Spacer(modifier = Modifier.height(20.dp))

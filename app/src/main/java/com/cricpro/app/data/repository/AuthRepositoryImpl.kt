@@ -55,6 +55,26 @@ class AuthRepositoryImpl @Inject constructor(
     }
 
     override suspend fun updateUserProfile(user: User): Result<Unit> {
-        return Result.success(Unit)
+        return authService.saveUserProfile(user).map { Unit }
+    }
+
+    override suspend fun saveUserProfile(user: User): Result<User> {
+        return authService.saveUserProfile(user)
+    }
+
+    override suspend fun sendEmailOtp(email: String): Result<String> {
+        return authService.sendEmailOtp(email)
+    }
+
+    override suspend fun verifyEmailOtp(email: String, otp: String): Result<User> {
+        return authService.verifyEmailOtp(email, otp)
+    }
+
+    override suspend fun loginWithPin(email: String, pin: String): Result<User> {
+        return authService.loginWithPin(email, pin)
+    }
+
+    override suspend fun loginWithGoogle(name: String, email: String, photoUrl: String): Result<User> {
+        return authService.loginWithGoogle(name, email, photoUrl)
     }
 }

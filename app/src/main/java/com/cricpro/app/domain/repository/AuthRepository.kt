@@ -11,4 +11,9 @@ interface AuthRepository {
     suspend fun logout()
     suspend fun getUserProfile(uid: String): Result<User>
     suspend fun updateUserProfile(user: User): Result<Unit>
+    suspend fun saveUserProfile(user: User): Result<User>
+    suspend fun sendEmailOtp(email: String): Result<String>
+    suspend fun verifyEmailOtp(email: String, otp: String): Result<User>
+    suspend fun loginWithPin(email: String, pin: String): Result<User>
+    suspend fun loginWithGoogle(name: String, email: String, photoUrl: String): Result<User>
 }

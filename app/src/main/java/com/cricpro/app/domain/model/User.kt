@@ -6,6 +6,13 @@ data class User(
     val email: String = "",
     val profileImage: String = "",
     val role: String = "user", // "user" or "admin"
+    val primaryRole: String = "Batter", // Batter, Bowler, All-Rounder, Wicket-Keeper
+    val battingStyle: String = "Right-Hand Bat",
+    val bowlingStyle: String = "Right-arm Medium",
+    val city: String = "",
+    val state: String = "",
+    val securityPin: String = "",
+    val isGuest: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val lastLogin: Long = System.currentTimeMillis(),

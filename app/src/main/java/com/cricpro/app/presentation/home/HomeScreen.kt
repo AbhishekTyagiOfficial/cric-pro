@@ -37,9 +37,6 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text("CricPro", fontWeight = FontWeight.Bold) },
                 actions = {
-                    IconButton(onClick = onNavigateToSearch) {
-                        Icon(Icons.Default.Search, contentDescription = "Search")
-                    }
                     IconButton(onClick = onNavigateToNotifications) {
                         Icon(Icons.Default.Notifications, contentDescription = "Notifications")
                     }
