@@ -25,12 +25,30 @@ class FirebaseAuthService @Inject constructor(
     private val prefs = context.getSharedPreferences("cricpro_users_registry", Context.MODE_PRIVATE)
 
     val currentUserId: String?
-        get() = auth.currentUser?.uid
+        get() {
+            val loggedInEmail = prefs.getString("active_logged_in_email", "") ?: ""
+            if (loggedInEmail.isNotBlank()) {
+                return "user_${loggedInEmail.lowercase().replace(".", "_")}"
+            }
+            val firebaseUid = auth.currentUser?.uid
+            if (!firebaseUid.isNullOrBlank()) return firebaseUid
+            val guestId = prefs.getString("guest_session_id", "") ?: ""
+            if (guestId.isNotBlank()) return guestId
+            return null
+        }
+
+    private fun setActiveUserEmail(email: String) {
+        prefs.edit().putString("active_logged_in_email", email.trim().lowercase()).apply()
+    }
+
+    private fun clearActiveUserEmail() {
+        prefs.edit().remove("active_logged_in_email").remove("guest_session_id").apply()
+    }
 
     suspend fun clearLocalData() {
         withContext(Dispatchers.IO) {
             try {
-                database.clearAllTables()
+                // Preserving local db tables for multi-tenant user persistence
             } catch (_: Exception) { }
         }
     }
@@ -104,8 +122,6 @@ class FirebaseAuthService @Inject constructor(
             return Result.failure(Exception("This User ID is already registered. Please log in instead."))
         }
 
-        clearLocalData()
-
         val uid = "user_${cleanEmail.replace(".", "_")}"
         val newUser = User(
             uid = uid,
@@ -125,6 +141,7 @@ class FirebaseAuthService @Inject constructor(
 
         registeredUsers[cleanEmail] = newUser
         markUserPersisted(cleanEmail, newUser.fullName, newUser.securityPin)
+        setActiveUserEmail(cleanEmail)
         return Result.success(newUser)
     }
 
@@ -139,6 +156,7 @@ class FirebaseAuthService @Inject constructor(
 
         registeredUsers[cleanEmail] = user
         markUserPersisted(cleanEmail, user.fullName, user.securityPin)
+        setActiveUserEmail(cleanEmail)
         return Result.success(user)
     }
 
@@ -151,7 +169,7 @@ class FirebaseAuthService @Inject constructor(
         val registeredUser = getRegisteredUser(cleanEmail)
             ?: return Result.failure(Exception("User ID not registered. Please sign up to create an account."))
 
-        clearLocalData()
+        setActiveUserEmail(cleanEmail)
         return Result.success(registeredUser)
     }
 
@@ -204,7 +222,7 @@ class FirebaseAuthService @Inject constructor(
         val expectedOtp = activeOtps[cleanEmail]
 
         if (expectedOtp != null && expectedOtp == inputOtp.trim() || inputOtp.trim() == "123456") {
-            clearLocalData()
+            setActiveUserEmail(cleanEmail)
             return Result.success(registeredUser)
         } else {
             return Result.failure(Exception("Invalid OTP code. Please enter the 6-digit OTP code sent."))
@@ -228,7 +246,7 @@ class FirebaseAuthService @Inject constructor(
             return Result.failure(Exception("Incorrect 4-digit Security PIN."))
         }
 
-        clearLocalData()
+        setActiveUserEmail(cleanEmail)
         return Result.success(registeredUser)
     }
 
@@ -255,7 +273,7 @@ class FirebaseAuthService @Inject constructor(
             markUserPersisted(cleanEmail, name, "")
         }
 
-        clearLocalData()
+        setActiveUserEmail(cleanEmail)
         return Result.success(user)
     }
 
@@ -263,6 +281,6 @@ class FirebaseAuthService @Inject constructor(
         try {
             auth.signOut()
         } catch (_: Exception) { }
-        clearLocalData()
+        clearActiveUserEmail()
     }
 }

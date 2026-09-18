@@ -11,6 +11,7 @@ import com.cricpro.app.domain.model.TournamentType
 import com.cricpro.app.domain.repository.GroundRepository
 import com.cricpro.app.domain.repository.SyncRepository
 import com.cricpro.app.domain.repository.TournamentRepository
+import com.cricpro.app.data.remote.FirebaseAuthService
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -18,11 +19,17 @@ import javax.inject.Inject
 
 class TournamentRepositoryImpl @Inject constructor(
     private val tournamentDao: TournamentDao,
-    private val firestoreService: FirestoreService
+    private val firestoreService: FirestoreService,
+    private val authService: FirebaseAuthService
 ) : TournamentRepository {
 
     override fun getTournaments(): Flow<List<Tournament>> {
-        return tournamentDao.getTournaments().map { list -> list.map { it.toDomain() } }
+        val currentUid = authService.currentUserId ?: "guest"
+        return tournamentDao.getTournaments().map { list ->
+            list.map { it.toDomain() }.filter {
+                it.organizerId.isBlank() || currentUid.isBlank() || it.organizerId == currentUid
+            }
+        }
     }
 
     override fun getTournamentById(tournamentId: String): Flow<Tournament?> {
@@ -31,8 +38,12 @@ class TournamentRepositoryImpl @Inject constructor(
 
     override suspend fun createTournament(tournament: Tournament): Result<String> {
         return try {
+            val currentUid = authService.currentUserId ?: "guest"
             val tourId = if (tournament.tournamentId.isNotBlank()) tournament.tournamentId else "tour_${System.currentTimeMillis()}"
-            val finalTour = tournament.copy(tournamentId = tourId)
+            val finalTour = tournament.copy(
+                tournamentId = tourId,
+                organizerId = if (tournament.organizerId.isNotBlank()) tournament.organizerId else currentUid
+            )
             tournamentDao.insertTournament(finalTour.toEntity())
             firestoreService.saveTournament(finalTour)
             Result.success(tourId)

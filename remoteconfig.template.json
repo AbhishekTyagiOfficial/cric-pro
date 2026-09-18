@@ -1,0 +1,11 @@
+{
+  "parameters": {
+    "Tournament_tab_enable": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Controls visibility of Tournaments tab in CricPro main navigation",
+      "valueType": "BOOLEAN"
+    }
+  }
+}

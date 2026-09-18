@@ -13,23 +13,33 @@ import kotlinx.coroutines.flow.map
 import org.json.JSONObject
 import javax.inject.Inject
 
+import com.cricpro.app.data.remote.FirebaseAuthService
+
 class MatchRepositoryImpl @Inject constructor(
     private val matchDao: MatchDao,
-    private val firestoreService: FirestoreService
+    private val firestoreService: FirestoreService,
+    private val authService: FirebaseAuthService
 ) : MatchRepository {
 
     override fun getRecentMatches(): Flow<List<Match>> {
-        return matchDao.getMatches().map { list -> list.map { it.toDomain() } }
+        val currentUid = authService.currentUserId ?: "guest"
+        return matchDao.getMatches().map { list ->
+            list.filter { it.creatorId.isBlank() || it.creatorId == currentUid }.map { it.toDomain() }
+        }
     }
 
     override fun getUpcomingMatches(): Flow<List<Match>> {
+        val currentUid = authService.currentUserId ?: "guest"
         return matchDao.getMatches().map { list ->
-            list.filter { it.status == "SCHEDULED" }.map { it.toDomain() }
+            list.filter { (it.creatorId.isBlank() || it.creatorId == currentUid) && it.status == "SCHEDULED" }.map { it.toDomain() }
         }
     }
 
     override fun getCompletedMatches(): Flow<List<Match>> {
-        return matchDao.getCompletedMatches().map { list -> list.map { it.toDomain() } }
+        val currentUid = authService.currentUserId ?: "guest"
+        return matchDao.getCompletedMatches().map { list ->
+            list.filter { it.creatorId.isBlank() || it.creatorId == currentUid }.map { it.toDomain() }
+        }
     }
 
     override fun getMatchById(matchId: String): Flow<Match?> {
@@ -39,8 +49,10 @@ class MatchRepositoryImpl @Inject constructor(
     override suspend fun createMatch(match: Match): Result<String> {
         return try {
             val matchId = if (match.matchId.isNotBlank()) match.matchId else "match_${System.currentTimeMillis()}"
+            val currentCreator = match.creatorId.ifBlank { authService.currentUserId ?: "guest" }
             val finalMatch = match.copy(
                 matchId = matchId,
+                creatorId = currentCreator,
                 firstInnings = Innings(inningsNumber = 1, battingTeamId = match.teamA.teamId, bowlingTeamId = match.teamB.teamId),
                 secondInnings = Innings(inningsNumber = 2, battingTeamId = match.teamB.teamId, bowlingTeamId = match.teamA.teamId)
             )

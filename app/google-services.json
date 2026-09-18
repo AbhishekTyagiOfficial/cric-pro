@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "123456789012",
-    "project_id": "cricpro-app",
-    "storage_bucket": "cricpro-app.appspot.com"
+    "project_number": "364110399642",
+    "project_id": "cricpro-app-official",
+    "storage_bucket": "cricpro-app-official.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:123456789012:android:abcdef1234567890",
+        "mobilesdk_app_id": "1:364110399642:android:fe5e64dd21e25aa975f723",
         "android_client_info": {
           "package_name": "com.cricpro.app"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDummyKeyForCricProBuildVerification"
+          "current_key": "AIzaSyAh8VVoyl2tXkrtURMbD6EPBmgWETXNjY8"
         }
       ],
       "services": {

@@ -37,6 +37,12 @@ object FirebaseModule {
 
     @Provides
     @Singleton
+    fun provideFirebaseRemoteConfig(): com.google.firebase.remoteconfig.FirebaseRemoteConfig {
+        return com.google.firebase.remoteconfig.FirebaseRemoteConfig.getInstance()
+    }
+
+    @Provides
+    @Singleton
     fun provideScoringEngine(): ScoringEngine = ScoringEngine()
 }
 

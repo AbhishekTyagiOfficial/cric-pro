@@ -82,16 +82,18 @@ fun HomeScreen(
                     label = { Text("New Match", fontSize = 10.sp, maxLines = 1) },
                     alwaysShowLabel = true
                 )
-                NavigationBarItem(
-                    selected = selectedBottomItem == 3,
-                    onClick = {
-                        selectedBottomItem = 3
-                        onNavigateToTournaments()
-                    },
-                    icon = { Icon(Icons.Default.EmojiEvents, contentDescription = "Tournaments") },
-                    label = { Text("Tournaments", fontSize = 10.sp, maxLines = 1) },
-                    alwaysShowLabel = true
-                )
+                if (uiState.isTournamentTabEnabled) {
+                    NavigationBarItem(
+                        selected = selectedBottomItem == 3,
+                        onClick = {
+                            selectedBottomItem = 3
+                            onNavigateToTournaments()
+                        },
+                        icon = { Icon(Icons.Default.EmojiEvents, contentDescription = "Tournaments") },
+                        label = { Text("Tournaments", fontSize = 10.sp, maxLines = 1) },
+                        alwaysShowLabel = true
+                    )
+                }
                 NavigationBarItem(
                     selected = selectedBottomItem == 4,
                     onClick = {

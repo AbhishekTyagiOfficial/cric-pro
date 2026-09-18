@@ -12,21 +12,26 @@ import com.cricpro.app.domain.model.PlayerRole
 import com.cricpro.app.domain.model.Team
 import com.cricpro.app.domain.repository.TeamRepository
 import kotlinx.coroutines.flow.Flow
+import com.cricpro.app.data.remote.FirebaseAuthService
 import kotlinx.coroutines.flow.combine
 import javax.inject.Inject
 
 class TeamRepositoryImpl @Inject constructor(
     private val teamDao: TeamDao,
     private val playerDao: PlayerDao,
-    private val firestoreService: FirestoreService
+    private val firestoreService: FirestoreService,
+    private val authService: FirebaseAuthService
 ) : TeamRepository {
 
     override fun getTeams(): Flow<List<Team>> {
+        val currentUid = authService.currentUserId ?: "guest"
         return teamDao.getTeams().combine(playerDao.searchPlayers("")) { teamEntities, playerEntities ->
-            teamEntities.map { teamEntity ->
-                val teamPlayers = playerEntities.filter { it.teamId == teamEntity.teamId }.map { it.toDomain() }
-                teamEntity.toDomain(teamPlayers)
-            }
+            teamEntities
+                .filter { it.ownerId.isBlank() || it.ownerId == currentUid }
+                .map { teamEntity ->
+                    val teamPlayers = playerEntities.filter { it.teamId == teamEntity.teamId }.map { it.toDomain() }
+                    teamEntity.toDomain(teamPlayers)
+                }
         }
     }
 
@@ -39,9 +44,11 @@ class TeamRepositoryImpl @Inject constructor(
     override suspend fun createTeam(team: Team): Result<String> {
         return try {
             val teamId = if (team.teamId.isNotBlank()) team.teamId else "team_${System.currentTimeMillis()}"
-            val teamEntity = team.copy(teamId = teamId).toEntity()
+            val currentOwner = team.ownerId.ifBlank { authService.currentUserId ?: "guest" }
+            val finalTeam = team.copy(teamId = teamId, ownerId = currentOwner)
+            val teamEntity = finalTeam.toEntity()
             teamDao.insertTeam(teamEntity)
-            try { kotlinx.coroutines.withTimeoutOrNull(2000) { firestoreService.saveTeam(team.copy(teamId = teamId)) } } catch (e: Exception) {}
+            try { kotlinx.coroutines.withTimeoutOrNull(2000) { firestoreService.saveTeam(finalTeam) } } catch (e: Exception) {}
             Result.success(teamId)
         } catch (e: Exception) {
             Result.failure(e)
