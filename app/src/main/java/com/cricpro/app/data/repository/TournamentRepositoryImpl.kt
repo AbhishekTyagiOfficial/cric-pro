@@ -27,7 +27,7 @@ class TournamentRepositoryImpl @Inject constructor(
         val currentUid = authService.currentUserId ?: "guest"
         return tournamentDao.getTournaments().map { list ->
             list.map { it.toDomain() }.filter {
-                it.organizerId.isBlank() || currentUid.isBlank() || it.organizerId == currentUid
+                it.organizerId == currentUid
             }
         }
     }

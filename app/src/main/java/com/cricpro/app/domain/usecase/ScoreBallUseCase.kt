@@ -135,12 +135,25 @@ class ScoreBallUseCase @Inject constructor(
         val isMatchJustCompleted = (updatedStatus == MatchStatus.COMPLETED)
         val updatedMatchDate = if (isMatchJustCompleted && currentMatch.status != MatchStatus.COMPLETED) System.currentTimeMillis() else currentMatch.matchDate
 
+        val isTransitioningToInn2 = (nextInningsNumber == 2 && inningsNum == 1)
+        val batTeam2 = if (updatedSecondInnings?.battingTeamId == currentMatch.teamA.teamId) currentMatch.teamA else currentMatch.teamB
+        val bowlTeam2 = if (updatedSecondInnings?.bowlingTeamId == currentMatch.teamA.teamId) currentMatch.teamA else currentMatch.teamB
+
+        val defaultStriker2 = batTeam2.players.getOrNull(0)?.name ?: if (batTeam2.teamName.isNotBlank()) "${batTeam2.teamName} Player 1" else "Player 1"
+        val defaultNonStriker2 = batTeam2.players.getOrNull(1)?.name ?: if (batTeam2.teamName.isNotBlank()) "${batTeam2.teamName} Player 2" else "Player 2"
+        val defaultBowler2 = bowlTeam2.players.getOrNull(0)?.name ?: if (bowlTeam2.teamName.isNotBlank()) "${bowlTeam2.teamName} Bowler 1" else "Bowler 1"
+
+        val updatedStrikerId = if (isTransitioningToInn2) defaultStriker2 else (scoringResult.nextStrikerId ?: currentMatch.currentStrikerId)
+        val updatedNonStrikerId = if (isTransitioningToInn2) defaultNonStriker2 else (scoringResult.nextNonStrikerId ?: currentMatch.currentNonStrikerId)
+        val updatedBowlerId = if (isTransitioningToInn2) defaultBowler2 else currentMatch.currentBowlerId
+
         val updatedMatch = currentMatch.copy(
             firstInnings = updatedFirstInnings,
             secondInnings = updatedSecondInnings,
             currentInningsNumber = nextInningsNumber,
-            currentStrikerId = scoringResult.nextStrikerId ?: currentMatch.currentStrikerId,
-            currentNonStrikerId = scoringResult.nextNonStrikerId ?: currentMatch.currentNonStrikerId,
+            currentStrikerId = updatedStrikerId,
+            currentNonStrikerId = updatedNonStrikerId,
+            currentBowlerId = updatedBowlerId,
             status = updatedStatus,
             resultMessage = resultMessage,
             winnerTeamId = winnerTeamId,

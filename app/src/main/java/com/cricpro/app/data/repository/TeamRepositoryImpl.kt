@@ -27,7 +27,7 @@ class TeamRepositoryImpl @Inject constructor(
         val currentUid = authService.currentUserId ?: "guest"
         return teamDao.getTeams().combine(playerDao.searchPlayers("")) { teamEntities, playerEntities ->
             teamEntities
-                .filter { it.ownerId.isBlank() || it.ownerId == currentUid }
+                .filter { it.ownerId == currentUid }
                 .map { teamEntity ->
                     val teamPlayers = playerEntities.filter { it.teamId == teamEntity.teamId }.map { it.toDomain() }
                     teamEntity.toDomain(teamPlayers)

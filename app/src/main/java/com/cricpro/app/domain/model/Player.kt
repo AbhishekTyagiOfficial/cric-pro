@@ -1,5 +1,7 @@
 package com.cricpro.app.domain.model
 
+import com.google.firebase.firestore.Exclude
+
 enum class PlayerRole {
     BATSMAN,
     BOWLER,
@@ -37,15 +39,19 @@ data class PlayerStats(
     val bestBowlingRuns: Int = 0,
     val bestBowlingWickets: Int = 0
 ) {
+    @get:Exclude
     val battingAverage: Double
         get() = if (innings - notOuts > 0) runs.toDouble() / (innings - notOuts) else runs.toDouble()
 
+    @get:Exclude
     val battingStrikeRate: Double
         get() = if (ballsFaced > 0) (runs.toDouble() / ballsFaced) * 100 else 0.0
 
+    @get:Exclude
     val bowlingAverage: Double
         get() = if (wickets > 0) runsConceded.toDouble() / wickets else 0.0
 
+    @get:Exclude
     val economyRate: Double
         get() {
             val totalLegalBalls = (oversBowled.toInt() * 6) + ((oversBowled * 10) % 10).toInt()

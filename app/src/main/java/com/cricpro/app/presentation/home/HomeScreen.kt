@@ -208,6 +208,30 @@ fun HomeScreen(
 
 @Composable
 fun MatchCard(match: Match, onClick: () -> Unit) {
+    val teamAScore = remember(match) {
+        val inn = when {
+            match.firstInnings?.battingTeamId == match.teamA.teamId -> match.firstInnings
+            match.secondInnings?.battingTeamId == match.teamA.teamId -> match.secondInnings
+            match.firstInnings != null && (match.firstInnings?.totalRuns ?: 0) > 0 -> match.firstInnings
+            else -> match.firstInnings
+        }
+        val runs = inn?.totalRuns ?: 0
+        val wkts = inn?.wickets ?: 0
+        "$runs/$wkts"
+    }
+
+    val teamBScore = remember(match) {
+        val inn = when {
+            match.firstInnings?.battingTeamId == match.teamB.teamId -> match.firstInnings
+            match.secondInnings?.battingTeamId == match.teamB.teamId -> match.secondInnings
+            match.secondInnings != null && (match.secondInnings?.totalRuns ?: 0) > 0 -> match.secondInnings
+            else -> match.secondInnings
+        }
+        val runs = inn?.totalRuns ?: 0
+        val wkts = inn?.wickets ?: 0
+        "$runs/$wkts"
+    }
+
     Card(
         onClick = onClick,
         modifier = Modifier.width(260.dp)
@@ -236,12 +260,12 @@ fun MatchCard(match: Match, onClick: () -> Unit) {
             Spacer(modifier = Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(match.teamA.teamName, fontWeight = FontWeight.Bold)
-                Text("${match.firstInnings?.totalRuns ?: 0}/${match.firstInnings?.wickets ?: 0}")
+                Text(teamAScore)
             }
             Spacer(modifier = Modifier.height(4.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(match.teamB.teamName, fontWeight = FontWeight.Bold)
-                Text("${match.secondInnings?.totalRuns ?: 0}/${match.secondInnings?.wickets ?: 0}")
+                Text(teamBScore)
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(

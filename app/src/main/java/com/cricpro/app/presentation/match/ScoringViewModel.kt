@@ -11,6 +11,7 @@ import com.cricpro.app.domain.usecase.EditBallUseCase
 import com.cricpro.app.domain.usecase.ScoreBallUseCase
 import com.cricpro.app.domain.usecase.UndoBallUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -62,7 +63,7 @@ class ScoringViewModel @Inject constructor(
 
     init {
         if (matchId.isNotBlank()) {
-            viewModelScope.launch {
+            viewModelScope.launch(Dispatchers.IO) {
                 combine(
                     matchRepository.getMatchById(matchId),
                     teamRepository.getTeams(),
@@ -76,7 +77,7 @@ class ScoringViewModel @Inject constructor(
                         val fullMatch = rawMatch.copy(teamA = tA, teamB = tB)
                         Triple(fullMatch, balls1, balls2)
                     }
-                }.collect { triple ->
+                }.flowOn(Dispatchers.IO).collect { triple ->
                     if (triple == null) return@collect
                     val (match, balls1, balls2) = triple
 
@@ -218,6 +219,29 @@ class ScoringViewModel @Inject constructor(
                         _overrideNonStrikerId.value = null
                     }
 
+                    fun isPlayerInTeamSquad(playerNameOrId: String?, team: Team, otherTeam: Team): Boolean {
+                        if (playerNameOrId.isNullOrBlank()) return false
+                        if (team.players.isNotEmpty()) {
+                            val inThisTeam = team.players.any {
+                                it.name.equals(playerNameOrId, ignoreCase = true) || it.playerId == playerNameOrId
+                            }
+                            if (inThisTeam) return true
+                            if (otherTeam.players.isNotEmpty()) {
+                                val inOtherTeam = otherTeam.players.any {
+                                    it.name.equals(playerNameOrId, ignoreCase = true) || it.playerId == playerNameOrId
+                                }
+                                if (inOtherTeam) return false
+                            }
+                        }
+                        if (team.teamName.isNotBlank() && playerNameOrId.contains(team.teamName, ignoreCase = true)) {
+                            return true
+                        }
+                        if (otherTeam.teamName.isNotBlank() && playerNameOrId.contains(otherTeam.teamName, ignoreCase = true)) {
+                            return false
+                        }
+                        return true
+                    }
+
                     val isSecondInningsNoBalls = (activeInningsNum == 2 && balls2.isEmpty())
 
                     val engineStriker = activeRes.nextStrikerId
@@ -226,7 +250,8 @@ class ScoringViewModel @Inject constructor(
                     fun isBatterNotOut(name: String?): Boolean {
                         if (name.isNullOrBlank()) return false
                         val bScore = getBatterScore(name)
-                        return bScore?.isOut != true
+                        if (bScore != null) return !bScore.isOut
+                        return isPlayerInTeamSquad(name, batTeamActive, bowlTeamActive)
                     }
 
                     val rawStriker = _overrideStrikerId.value
@@ -280,9 +305,13 @@ class ScoringViewModel @Inject constructor(
                         rawNonStriker
                     }
 
-                    val defaultStrikerToUse = if (isSecondInningsNoBalls && _overrideStrikerId.value == null && match.currentStrikerId.isNullOrBlank()) defaultStriker else null
-                    val defaultNonStrikerToUse = if (isSecondInningsNoBalls && _overrideNonStrikerId.value == null && match.currentNonStrikerId.isNullOrBlank()) defaultNonStriker else null
-                    val defaultBowlerToUse = if (isSecondInningsNoBalls && _overrideBowlerId.value == null && match.currentBowlerId.isNullOrBlank()) defaultBowler else null
+                    val isStrikerInvalidForTeam = !isPlayerInTeamSquad(match.currentStrikerId, batTeamActive, bowlTeamActive)
+                    val isNonStrikerInvalidForTeam = !isPlayerInTeamSquad(match.currentNonStrikerId, batTeamActive, bowlTeamActive)
+                    val isBowlerInvalidForTeam = !isPlayerInTeamSquad(match.currentBowlerId, bowlTeamActive, batTeamActive)
+
+                    val defaultStrikerToUse = if ((isSecondInningsNoBalls || isStrikerInvalidForTeam) && _overrideStrikerId.value == null) defaultStriker else null
+                    val defaultNonStrikerToUse = if ((isSecondInningsNoBalls || isNonStrikerInvalidForTeam) && _overrideNonStrikerId.value == null) defaultNonStriker else null
+                    val defaultBowlerToUse = if ((isSecondInningsNoBalls || isBowlerInvalidForTeam) && _overrideBowlerId.value == null) defaultBowler else null
 
                     val currentStriker = defaultStrikerToUse ?: resolvedStriker ?: defaultStriker
 
@@ -294,7 +323,7 @@ class ScoringViewModel @Inject constructor(
                         currentNonStriker = altNonStriker
                     }
 
-                    var currentBowler = defaultBowlerToUse ?: activeBowlerFromStream ?: defaultBowler
+                    var currentBowler = defaultBowlerToUse ?: (if (!isBowlerInvalidForTeam) activeBowlerFromStream else null) ?: defaultBowler
                     if (currentBowler == currentStriker || currentBowler == currentNonStriker) {
                         _overrideBowlerId.value = null
                         val bowlSquad = if (bowlTeamActive.players.isNotEmpty()) {

@@ -1,5 +1,7 @@
 package com.cricpro.app.domain.model
 
+import com.google.firebase.firestore.Exclude
+
 enum class ExtraType {
     NONE,
     WIDE,
@@ -45,6 +47,7 @@ data class Ball(
     val commentary: String = "",
     val timestamp: Long = System.currentTimeMillis()
 ) {
+    @get:Exclude
     val totalRunsOnBall: Int
         get() = runsScored + extraRuns
 }

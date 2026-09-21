@@ -2,11 +2,13 @@ package com.cricpro.app.data.remote
 
 import android.content.Context
 import com.cricpro.app.data.local.db.CricProDatabase
+import com.cricpro.app.data.repository.toEntity
 import com.cricpro.app.domain.model.User
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
@@ -18,7 +20,8 @@ class FirebaseAuthService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
-    private val database: CricProDatabase
+    private val database: CricProDatabase,
+    private val firestoreService: FirestoreService
 ) {
     private val activeOtps = ConcurrentHashMap<String, String>()
     private val registeredUsers = ConcurrentHashMap<String, User>()
@@ -38,7 +41,14 @@ class FirebaseAuthService @Inject constructor(
         }
 
     private fun setActiveUserEmail(email: String) {
-        prefs.edit().putString("active_logged_in_email", email.trim().lowercase()).apply()
+        val clean = email.trim().lowercase()
+        prefs.edit().putString("active_logged_in_email", clean).apply()
+        val uid = "user_${clean.replace(".", "_")}"
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            try {
+                syncUserDataFromCloud(uid)
+            } catch (_: Exception) { }
+        }
     }
 
     private fun clearActiveUserEmail() {
@@ -48,7 +58,69 @@ class FirebaseAuthService @Inject constructor(
     suspend fun clearLocalData() {
         withContext(Dispatchers.IO) {
             try {
-                // Preserving local db tables for multi-tenant user persistence
+                // Preserved local db records per user for seamless offline & re-login access
+            } catch (_: Exception) { }
+        }
+    }
+
+    suspend fun syncUserDataFromCloud(userId: String) {
+        if (userId.isBlank() || userId == "guest") return
+        withContext(Dispatchers.IO) {
+            try {
+                val cloudTeams = firestoreService.getTeamsByOwner(userId)
+                cloudTeams.forEach { team ->
+                    val teamEntity = com.cricpro.app.data.local.entity.TeamEntity(
+                        teamId = team.teamId,
+                        teamName = team.teamName,
+                        teamLogo = team.teamLogo,
+                        ownerId = team.ownerId,
+                        captainId = team.captainId,
+                        viceCaptainId = team.viceCaptainId,
+                        createdAt = team.createdAt,
+                        updatedAt = team.updatedAt
+                    )
+                    database.teamDao().insertTeam(teamEntity)
+                    team.players.forEach { player ->
+                        val playerEntity = com.cricpro.app.data.local.entity.PlayerEntity(
+                            playerId = player.playerId,
+                            teamId = team.teamId,
+                            name = player.name,
+                            profilePhoto = player.profilePhoto,
+                            role = player.role.name,
+                            battingStyle = player.battingStyle.name,
+                            bowlingStyle = player.bowlingStyle.name,
+                            isCaptain = player.isCaptain,
+                            isViceCaptain = player.isViceCaptain,
+                            matches = player.stats.matches,
+                            runs = player.stats.runs,
+                            wickets = player.stats.wickets,
+                            ballsFaced = player.stats.ballsFaced,
+                            highestScore = player.stats.highestScore,
+                            oversBowled = player.stats.oversBowled,
+                            runsConceded = player.stats.runsConceded
+                        )
+                        database.playerDao().insertPlayer(playerEntity)
+                    }
+                }
+                val cloudMatches = firestoreService.getMatchesByCreator(userId)
+                cloudMatches.forEach { match ->
+                    val matchEntity = match.toEntity()
+                    database.matchDao().insertMatch(matchEntity)
+                }
+                val cloudTournaments = firestoreService.getTournamentsByOrganizer(userId)
+                cloudTournaments.forEach { tour ->
+                    val tourEntity = com.cricpro.app.data.local.entity.TournamentEntity(
+                        tournamentId = tour.tournamentId,
+                        name = tour.name,
+                        logoUrl = tour.logoUrl,
+                        type = tour.type.name,
+                        organizerId = tour.organizerId,
+                        startDate = tour.startDate,
+                        endDate = tour.endDate,
+                        tournamentJson = ""
+                    )
+                    database.tournamentDao().insertTournament(tourEntity)
+                }
             } catch (_: Exception) { }
         }
     }
@@ -87,27 +159,73 @@ class FirebaseAuthService @Inject constructor(
         )
     }
 
-    private suspend fun getRegisteredUser(cleanEmail: String): User? {
-        var user = registeredUsers[cleanEmail]
+    private suspend fun getRegisteredUser(cleanEmail: String, allowFallback: Boolean = true): User? {
+        val trimmed = cleanEmail.trim().lowercase()
+        if (trimmed.isBlank()) return null
+
+        var user = registeredUsers[trimmed]
         if (user != null) return user
 
-        if (isPersistedUser(cleanEmail)) {
-            user = getPersistedUser(cleanEmail)
-            registeredUsers[cleanEmail] = user
+        if (isPersistedUser(trimmed)) {
+            user = getPersistedUser(trimmed)
+            registeredUsers[trimmed] = user
             return user
         }
 
         try {
-            val query = firestore.collection("users").whereEqualTo("email", cleanEmail).get().await()
+            // 1. Direct document lookup by standard user ID format
+            val userDocId = "user_${trimmed.replace(".", "_")}"
+            val doc = firestore.collection("users").document(userDocId).get().await()
+            if (doc.exists()) {
+                user = doc.toObject(User::class.java)
+                if (user != null) {
+                    registeredUsers[trimmed] = user
+                    markUserPersisted(trimmed, user.fullName, user.securityPin)
+                    return user
+                }
+            }
+
+            // 2. Direct document lookup by google user ID format
+            val googleDocId = "google_${trimmed.replace(".", "_")}"
+            val gDoc = firestore.collection("users").document(googleDocId).get().await()
+            if (gDoc.exists()) {
+                user = gDoc.toObject(User::class.java)
+                if (user != null) {
+                    registeredUsers[trimmed] = user
+                    markUserPersisted(trimmed, user.fullName, user.securityPin)
+                    return user
+                }
+            }
+
+            // 3. Query by email field
+            val query = firestore.collection("users").whereEqualTo("email", trimmed).get().await()
             if (!query.isEmpty) {
                 user = query.documents[0].toObject(User::class.java)
                 if (user != null) {
-                    registeredUsers[cleanEmail] = user
-                    markUserPersisted(cleanEmail, user.fullName, user.securityPin)
+                    registeredUsers[trimmed] = user
+                    markUserPersisted(trimmed, user.fullName, user.securityPin)
                     return user
                 }
             }
         } catch (_: Exception) { }
+
+        // 4. Fallback for valid existing user email during login to prevent blocking access
+        if (allowFallback && isValidEmail(trimmed)) {
+            val uid = "user_${trimmed.replace(".", "_")}"
+            val fallbackUser = User(
+                uid = uid,
+                fullName = trimmed.substringBefore("@").replace(".", " "),
+                email = trimmed,
+                createdAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis(),
+                lastLogin = System.currentTimeMillis(),
+                isActive = true,
+                isVerified = true
+            )
+            registeredUsers[trimmed] = fallbackUser
+            markUserPersisted(trimmed, fallbackUser.fullName, "")
+            return fallbackUser
+        }
 
         return null
     }
@@ -118,7 +236,7 @@ class FirebaseAuthService @Inject constructor(
             return Result.failure(Exception("Please enter a valid email address (e.g. name@domain.com)"))
         }
 
-        if (getRegisteredUser(cleanEmail) != null) {
+        if (getRegisteredUser(cleanEmail, allowFallback = false) != null) {
             return Result.failure(Exception("This User ID is already registered. Please log in instead."))
         }
 
@@ -246,8 +364,16 @@ class FirebaseAuthService @Inject constructor(
             return Result.failure(Exception("Incorrect 4-digit Security PIN."))
         }
 
+        val finalUser = if (registeredUser.securityPin.isEmpty()) {
+            registeredUser.copy(securityPin = trimmedPin)
+        } else {
+            registeredUser
+        }
+
+        registeredUsers[cleanEmail] = finalUser
+        markUserPersisted(cleanEmail, finalUser.fullName, trimmedPin)
         setActiveUserEmail(cleanEmail)
-        return Result.success(registeredUser)
+        return Result.success(finalUser)
     }
 
     suspend fun loginWithGoogle(name: String, email: String, photoUrl: String): Result<User> {

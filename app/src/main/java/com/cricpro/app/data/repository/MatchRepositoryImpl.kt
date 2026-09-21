@@ -8,8 +8,10 @@ import com.cricpro.app.data.remote.FirestoreService
 import com.cricpro.app.domain.model.*
 import com.cricpro.app.domain.repository.MatchRepository
 import com.cricpro.app.domain.repository.ScoringRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import javax.inject.Inject
 
@@ -24,21 +26,21 @@ class MatchRepositoryImpl @Inject constructor(
     override fun getRecentMatches(): Flow<List<Match>> {
         val currentUid = authService.currentUserId ?: "guest"
         return matchDao.getMatches().map { list ->
-            list.filter { it.creatorId.isBlank() || it.creatorId == currentUid }.map { it.toDomain() }
+            list.filter { it.creatorId == currentUid }.map { it.toDomain() }
         }
     }
 
     override fun getUpcomingMatches(): Flow<List<Match>> {
         val currentUid = authService.currentUserId ?: "guest"
         return matchDao.getMatches().map { list ->
-            list.filter { (it.creatorId.isBlank() || it.creatorId == currentUid) && it.status == "SCHEDULED" }.map { it.toDomain() }
+            list.filter { it.creatorId == currentUid && it.status == "SCHEDULED" }.map { it.toDomain() }
         }
     }
 
     override fun getCompletedMatches(): Flow<List<Match>> {
         val currentUid = authService.currentUserId ?: "guest"
         return matchDao.getCompletedMatches().map { list ->
-            list.filter { it.creatorId.isBlank() || it.creatorId == currentUid }.map { it.toDomain() }
+            list.filter { it.creatorId == currentUid }.map { it.toDomain() }
         }
     }
 
@@ -224,8 +226,17 @@ fun MatchEntity.toDomain(): Match {
         bowler = bowlerRegex.find(matchJson)?.groupValues?.get(1)?.ifEmpty { null }
     }
 
-    if (inn1 == null) inn1 = Innings(1, battingA, bowlingA)
-    if (inn2 == null) inn2 = Innings(2, bowlingA, battingA)
+    if (inn1 == null) {
+        inn1 = Innings(1, battingA, bowlingA)
+    } else if (inn1.battingTeamId.isBlank()) {
+        inn1 = inn1.copy(battingTeamId = battingA, bowlingTeamId = bowlingA)
+    }
+
+    if (inn2 == null) {
+        inn2 = Innings(2, bowlingA, battingA)
+    } else if (inn2.battingTeamId.isBlank()) {
+        inn2 = inn2.copy(battingTeamId = bowlingA, bowlingTeamId = battingA)
+    }
 
     return Match(
         matchId = matchId,
@@ -263,8 +274,8 @@ class ScoringRepositoryImpl @Inject constructor(
         return ballDao.getBallsForInnings(matchId, inningsNumber).map { list -> list.map { it.toDomain() } }
     }
 
-    override suspend fun scoreBall(matchId: String, ball: Ball): Result<Unit> {
-        return try {
+    override suspend fun scoreBall(matchId: String, ball: Ball): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
             val ballEntity = ball.toEntity(matchId)
             ballDao.insertBall(ballEntity)
             try {
@@ -278,8 +289,8 @@ class ScoringRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun undoLastBall(matchId: String, inningsNumber: Int): Result<Unit> {
-        return try {
+    override suspend fun undoLastBall(matchId: String, inningsNumber: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
             ballDao.deleteLastBall(matchId, inningsNumber)
             Result.success(Unit)
         } catch (e: Exception) {
@@ -287,8 +298,8 @@ class ScoringRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun editBall(matchId: String, updatedBall: Ball): Result<Unit> {
-        return try {
+    override suspend fun editBall(matchId: String, updatedBall: Ball): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
             ballDao.insertBall(updatedBall.toEntity(matchId))
             try {
                 firestoreService.saveBall(matchId, updatedBall)
@@ -299,8 +310,8 @@ class ScoringRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun deleteBall(matchId: String, ballId: String): Result<Unit> {
-        return try {
+    override suspend fun deleteBall(matchId: String, ballId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
             ballDao.deleteBall(ballId)
             Result.success(Unit)
         } catch (e: Exception) {
@@ -308,8 +319,8 @@ class ScoringRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun syncInningsState(matchId: String, match: Match): Result<Unit> {
-        return try {
+    override suspend fun syncInningsState(matchId: String, match: Match): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
             matchDao.insertMatch(match.toEntity())
             try {
                 firestoreService.saveMatch(match)
