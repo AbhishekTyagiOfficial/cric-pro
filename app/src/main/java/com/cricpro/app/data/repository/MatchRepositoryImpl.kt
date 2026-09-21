@@ -23,24 +23,36 @@ class MatchRepositoryImpl @Inject constructor(
     private val authService: FirebaseAuthService
 ) : MatchRepository {
 
+    private fun isMatchOwnedByUser(creatorId: String, currentUid: String): Boolean {
+        if (creatorId.isBlank() || creatorId == "guest" || currentUid == "guest") return true
+        if (creatorId == currentUid) return true
+        val cleanCurrent = currentUid.lowercase().removePrefix("user_").removePrefix("google_")
+        val cleanCreator = creatorId.lowercase().removePrefix("user_").removePrefix("google_")
+        if (cleanCurrent == cleanCreator) return true
+        val restoredCurrent = cleanCurrent.replace("_", ".")
+        val restoredCreator = cleanCreator.replace("_", ".")
+        if (restoredCurrent == restoredCreator || restoredCurrent.startsWith(restoredCreator) || restoredCreator.startsWith(restoredCurrent)) return true
+        return false
+    }
+
     override fun getRecentMatches(): Flow<List<Match>> {
         val currentUid = authService.currentUserId ?: "guest"
         return matchDao.getMatches().map { list ->
-            list.filter { it.creatorId == currentUid }.map { it.toDomain() }
+            list.filter { isMatchOwnedByUser(it.creatorId, currentUid) }.map { it.toDomain() }
         }
     }
 
     override fun getUpcomingMatches(): Flow<List<Match>> {
         val currentUid = authService.currentUserId ?: "guest"
         return matchDao.getMatches().map { list ->
-            list.filter { it.creatorId == currentUid && it.status == "SCHEDULED" }.map { it.toDomain() }
+            list.filter { isMatchOwnedByUser(it.creatorId, currentUid) && it.status == "SCHEDULED" }.map { it.toDomain() }
         }
     }
 
     override fun getCompletedMatches(): Flow<List<Match>> {
         val currentUid = authService.currentUserId ?: "guest"
         return matchDao.getCompletedMatches().map { list ->
-            list.filter { it.creatorId == currentUid }.map { it.toDomain() }
+            list.filter { isMatchOwnedByUser(it.creatorId, currentUid) }.map { it.toDomain() }
         }
     }
 
@@ -138,29 +150,43 @@ fun Innings.toJsonString(): String {
 
 fun parseInningsFromJson(jsonStr: String): Innings? {
     if (jsonStr.isBlank()) return null
-    fun extractInt(key: String): Int? {
-        val regex = "\"$key\":\\s*(\\d+)".toRegex()
-        return regex.find(jsonStr)?.groupValues?.get(1)?.toIntOrNull()
-    }
-    fun extractString(key: String): String {
-        val regex = "\"$key\":\\s*\"([^\"]*)\"".toRegex()
-        return regex.find(jsonStr)?.groupValues?.get(1) ?: ""
-    }
-    fun extractBool(key: String): Boolean {
-        val regex = "\"$key\":\\s*(true|false)".toRegex()
-        return regex.find(jsonStr)?.groupValues?.get(1)?.toBooleanStrictOrNull() ?: false
-    }
+    return try {
+        val root = JSONObject(jsonStr)
+        Innings(
+            inningsNumber = root.optInt("inningsNumber", 1),
+            battingTeamId = root.optString("battingTeamId", ""),
+            bowlingTeamId = root.optString("bowlingTeamId", ""),
+            totalRuns = root.optInt("totalRuns", 0),
+            wickets = root.optInt("wickets", 0),
+            legalBallsBowled = root.optInt("legalBallsBowled", 0),
+            target = if (root.has("target") && !root.isNull("target")) root.optInt("target") else null,
+            isCompleted = root.optBoolean("isCompleted", false)
+        )
+    } catch (_: Exception) {
+        fun extractInt(key: String): Int? {
+            val regex = "\"$key\":\\s*(\\d+)".toRegex()
+            return regex.find(jsonStr)?.groupValues?.get(1)?.toIntOrNull()
+        }
+        fun extractString(key: String): String {
+            val regex = "\"$key\":\\s*\"([^\"]*)\"".toRegex()
+            return regex.find(jsonStr)?.groupValues?.get(1) ?: ""
+        }
+        fun extractBool(key: String): Boolean {
+            val regex = "\"$key\":\\s*(true|false)".toRegex()
+            return regex.find(jsonStr)?.groupValues?.get(1)?.toBooleanStrictOrNull() ?: false
+        }
 
-    return Innings(
-        inningsNumber = extractInt("inningsNumber") ?: 1,
-        battingTeamId = extractString("battingTeamId"),
-        bowlingTeamId = extractString("bowlingTeamId"),
-        totalRuns = extractInt("totalRuns") ?: 0,
-        wickets = extractInt("wickets") ?: 0,
-        legalBallsBowled = extractInt("legalBallsBowled") ?: 0,
-        target = extractInt("target"),
-        isCompleted = extractBool("isCompleted")
-    )
+        Innings(
+            inningsNumber = extractInt("inningsNumber") ?: 1,
+            battingTeamId = extractString("battingTeamId"),
+            bowlingTeamId = extractString("bowlingTeamId"),
+            totalRuns = extractInt("totalRuns") ?: 0,
+            wickets = extractInt("wickets") ?: 0,
+            legalBallsBowled = extractInt("legalBallsBowled") ?: 0,
+            target = extractInt("target"),
+            isCompleted = extractBool("isCompleted")
+        )
+    }
 }
 
 fun Match.toEntity(): MatchEntity {
@@ -209,21 +235,36 @@ fun MatchEntity.toDomain(): Match {
     var bowler: String? = null
 
     if (matchJson.isNotBlank()) {
-        val inn1Regex = "\"firstInnings\":(\\{[^}]*\\})".toRegex()
-        val inn2Regex = "\"secondInnings\":(\\{[^}]*\\})".toRegex()
-        val strikerRegex = "\"striker\":\"([^\"]*)\"".toRegex()
-        val nonStrikerRegex = "\"nonStriker\":\"([^\"]*)\"".toRegex()
-        val bowlerRegex = "\"bowler\":\"([^\"]*)\"".toRegex()
+        try {
+            val root = JSONObject(matchJson)
+            if (root.has("firstInnings") && !root.isNull("firstInnings")) {
+                val inn1Obj = root.optJSONObject("firstInnings")
+                if (inn1Obj != null) inn1 = parseInningsFromJson(inn1Obj.toString())
+            }
+            if (root.has("secondInnings") && !root.isNull("secondInnings")) {
+                val inn2Obj = root.optJSONObject("secondInnings")
+                if (inn2Obj != null) inn2 = parseInningsFromJson(inn2Obj.toString())
+            }
+            striker = root.optString("striker", "").ifEmpty { null }
+            nonStriker = root.optString("nonStriker", "").ifEmpty { null }
+            bowler = root.optString("bowler", "").ifEmpty { null }
+        } catch (_: Exception) {
+            val inn1Regex = "\"firstInnings\":(\\{[^}]*\\})".toRegex()
+            val inn2Regex = "\"secondInnings\":(\\{[^}]*\\})".toRegex()
+            val strikerRegex = "\"striker\":\"([^\"]*)\"".toRegex()
+            val nonStrikerRegex = "\"nonStriker\":\"([^\"]*)\"".toRegex()
+            val bowlerRegex = "\"bowler\":\"([^\"]*)\"".toRegex()
 
-        val inn1Match = inn1Regex.find(matchJson)?.groupValues?.get(1)
-        val inn2Match = inn2Regex.find(matchJson)?.groupValues?.get(1)
+            val inn1Match = inn1Regex.find(matchJson)?.groupValues?.get(1)
+            val inn2Match = inn2Regex.find(matchJson)?.groupValues?.get(1)
 
-        if (inn1Match != null && inn1Match != "{}") inn1 = parseInningsFromJson(inn1Match)
-        if (inn2Match != null && inn2Match != "{}") inn2 = parseInningsFromJson(inn2Match)
+            if (inn1Match != null && inn1Match != "{}") inn1 = parseInningsFromJson(inn1Match)
+            if (inn2Match != null && inn2Match != "{}") inn2 = parseInningsFromJson(inn2Match)
 
-        striker = strikerRegex.find(matchJson)?.groupValues?.get(1)?.ifEmpty { null }
-        nonStriker = nonStrikerRegex.find(matchJson)?.groupValues?.get(1)?.ifEmpty { null }
-        bowler = bowlerRegex.find(matchJson)?.groupValues?.get(1)?.ifEmpty { null }
+            striker = strikerRegex.find(matchJson)?.groupValues?.get(1)?.ifEmpty { null }
+            nonStriker = nonStrikerRegex.find(matchJson)?.groupValues?.get(1)?.ifEmpty { null }
+            bowler = bowlerRegex.find(matchJson)?.groupValues?.get(1)?.ifEmpty { null }
+        }
     }
 
     if (inn1 == null) {

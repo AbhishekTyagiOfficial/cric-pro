@@ -208,28 +208,32 @@ fun HomeScreen(
 
 @Composable
 fun MatchCard(match: Match, onClick: () -> Unit) {
+    fun formatInningsScore(inn: com.cricpro.app.domain.model.Innings?): String {
+        if (inn == null) return "0/0"
+        val runs = inn.totalRuns
+        val wkts = inn.wickets
+        val overs = "${inn.legalBallsBowled / 6}.${inn.legalBallsBowled % 6}"
+        return if (inn.legalBallsBowled > 0) "$runs/$wkts ($overs ov)" else "$runs/$wkts"
+    }
+
     val teamAScore = remember(match) {
         val inn = when {
             match.firstInnings?.battingTeamId == match.teamA.teamId -> match.firstInnings
             match.secondInnings?.battingTeamId == match.teamA.teamId -> match.secondInnings
-            match.firstInnings != null && (match.firstInnings?.totalRuns ?: 0) > 0 -> match.firstInnings
+            (match.firstInnings?.totalRuns ?: 0) > 0 -> match.firstInnings
             else -> match.firstInnings
         }
-        val runs = inn?.totalRuns ?: 0
-        val wkts = inn?.wickets ?: 0
-        "$runs/$wkts"
+        formatInningsScore(inn)
     }
 
     val teamBScore = remember(match) {
         val inn = when {
             match.firstInnings?.battingTeamId == match.teamB.teamId -> match.firstInnings
             match.secondInnings?.battingTeamId == match.teamB.teamId -> match.secondInnings
-            match.secondInnings != null && (match.secondInnings?.totalRuns ?: 0) > 0 -> match.secondInnings
+            (match.secondInnings?.totalRuns ?: 0) > 0 -> match.secondInnings
             else -> match.secondInnings
         }
-        val runs = inn?.totalRuns ?: 0
-        val wkts = inn?.wickets ?: 0
-        "$runs/$wkts"
+        formatInningsScore(inn)
     }
 
     Card(
