@@ -87,27 +87,71 @@ class FirebaseAuthService @Inject constructor(
         )
     }
 
-    private suspend fun getRegisteredUser(cleanEmail: String): User? {
-        var user = registeredUsers[cleanEmail]
+    private suspend fun getRegisteredUser(cleanEmail: String, allowFallback: Boolean = false): User? {
+        val trimmed = cleanEmail.trim().lowercase()
+        if (trimmed.isBlank()) return null
+
+        var user = registeredUsers[trimmed]
         if (user != null) return user
 
-        if (isPersistedUser(cleanEmail)) {
-            user = getPersistedUser(cleanEmail)
-            registeredUsers[cleanEmail] = user
+        if (isPersistedUser(trimmed)) {
+            user = getPersistedUser(trimmed)
+            registeredUsers[trimmed] = user
             return user
         }
 
         try {
-            val query = firestore.collection("users").whereEqualTo("email", cleanEmail).get().await()
+            // 1. Direct document lookup by standard user ID format
+            val userDocId = "user_${trimmed.replace(".", "_")}"
+            val doc = firestore.collection("users").document(userDocId).get().await()
+            if (doc.exists()) {
+                user = doc.toObject(User::class.java)
+                if (user != null) {
+                    registeredUsers[trimmed] = user
+                    markUserPersisted(trimmed, user.fullName, user.securityPin)
+                    return user
+                }
+            }
+
+            // 2. Direct document lookup by google user ID format
+            val googleDocId = "google_${trimmed.replace(".", "_")}"
+            val gDoc = firestore.collection("users").document(googleDocId).get().await()
+            if (gDoc.exists()) {
+                user = gDoc.toObject(User::class.java)
+                if (user != null) {
+                    registeredUsers[trimmed] = user
+                    markUserPersisted(trimmed, user.fullName, user.securityPin)
+                    return user
+                }
+            }
+
+            // 3. Query by email field
+            val query = firestore.collection("users").whereEqualTo("email", trimmed).get().await()
             if (!query.isEmpty) {
                 user = query.documents[0].toObject(User::class.java)
                 if (user != null) {
-                    registeredUsers[cleanEmail] = user
-                    markUserPersisted(cleanEmail, user.fullName, user.securityPin)
+                    registeredUsers[trimmed] = user
+                    markUserPersisted(trimmed, user.fullName, user.securityPin)
                     return user
                 }
             }
         } catch (_: Exception) { }
+
+        if (allowFallback && isValidEmail(trimmed)) {
+            val fallbackUser = User(
+                uid = "user_${trimmed.replace(".", "_")}",
+                fullName = "CricPro Player",
+                email = trimmed,
+                createdAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis(),
+                lastLogin = System.currentTimeMillis(),
+                isActive = true,
+                isVerified = true
+            )
+            registeredUsers[trimmed] = fallbackUser
+            markUserPersisted(trimmed, fallbackUser.fullName, "")
+            return fallbackUser
+        }
 
         return null
     }
@@ -118,7 +162,7 @@ class FirebaseAuthService @Inject constructor(
             return Result.failure(Exception("Please enter a valid email address (e.g. name@domain.com)"))
         }
 
-        if (getRegisteredUser(cleanEmail) != null) {
+        if (getRegisteredUser(cleanEmail, allowFallback = false) != null) {
             return Result.failure(Exception("This User ID is already registered. Please log in instead."))
         }
 
@@ -166,11 +210,16 @@ class FirebaseAuthService @Inject constructor(
             return Result.failure(Exception("Please enter a valid email address (e.g. name@domain.com)"))
         }
 
-        val registeredUser = getRegisteredUser(cleanEmail)
+        val registeredUser = getRegisteredUser(cleanEmail, allowFallback = false)
             ?: return Result.failure(Exception("User ID not registered. Please sign up to create an account."))
 
-        setActiveUserEmail(cleanEmail)
-        return Result.success(registeredUser)
+        return try {
+            auth.signInWithEmailAndPassword(cleanEmail, password).await()
+            setActiveUserEmail(cleanEmail)
+            Result.success(registeredUser)
+        } catch (e: Exception) {
+            Result.failure(Exception("Incorrect password. Please enter the correct password."))
+        }
     }
 
     suspend fun sendPasswordReset(email: String): Result<Unit> {
@@ -192,7 +241,7 @@ class FirebaseAuthService @Inject constructor(
             return Result.failure(Exception("Please enter a valid email address (e.g. name@domain.com)"))
         }
 
-        val registeredUser = getRegisteredUser(cleanEmail)
+        val registeredUser = getRegisteredUser(cleanEmail, allowFallback = false)
             ?: return Result.failure(Exception("User ID not registered. Please sign up to create an account."))
 
         val generatedOtp = (100000..999999).random().toString()
@@ -216,12 +265,12 @@ class FirebaseAuthService @Inject constructor(
             return Result.failure(Exception("Please enter a valid email address"))
         }
 
-        val registeredUser = getRegisteredUser(cleanEmail)
+        val registeredUser = getRegisteredUser(cleanEmail, allowFallback = false)
             ?: return Result.failure(Exception("User ID not registered. Please sign up to create an account."))
 
         val expectedOtp = activeOtps[cleanEmail]
 
-        if (expectedOtp != null && expectedOtp == inputOtp.trim() || inputOtp.trim() == "123456") {
+        if (expectedOtp != null && expectedOtp == inputOtp.trim()) {
             setActiveUserEmail(cleanEmail)
             return Result.success(registeredUser)
         } else {
@@ -239,10 +288,10 @@ class FirebaseAuthService @Inject constructor(
             return Result.failure(Exception("Please enter your 4-digit Security PIN"))
         }
 
-        val registeredUser = getRegisteredUser(cleanEmail)
+        val registeredUser = getRegisteredUser(cleanEmail, allowFallback = false)
             ?: return Result.failure(Exception("User ID not registered. Please sign up to create an account."))
 
-        if (registeredUser.securityPin.isNotEmpty() && registeredUser.securityPin != trimmedPin) {
+        if (registeredUser.securityPin.isNotBlank() && registeredUser.securityPin != trimmedPin) {
             return Result.failure(Exception("Incorrect 4-digit Security PIN."))
         }
 
@@ -256,7 +305,7 @@ class FirebaseAuthService @Inject constructor(
             return Result.failure(Exception("Please enter a valid Google email address"))
         }
 
-        var user = getRegisteredUser(cleanEmail)
+        var user = getRegisteredUser(cleanEmail, allowFallback = false)
         if (user == null) {
             val uid = "google_${cleanEmail.replace(".", "_")}"
             user = User(
