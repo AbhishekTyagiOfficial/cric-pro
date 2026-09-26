@@ -2,7 +2,9 @@ package com.cricpro.app.data.remote
 
 import com.cricpro.app.domain.model.*
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -10,8 +12,8 @@ import javax.inject.Singleton
 class FirestoreService @Inject constructor(
     private val firestore: FirebaseFirestore
 ) {
-    suspend fun saveTeam(team: Team): Result<Unit> {
-        return try {
+    suspend fun saveTeam(team: Team): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
             firestore.collection("teams").document(team.teamId).set(team).await()
             Result.success(Unit)
         } catch (e: Exception) {
@@ -41,8 +43,8 @@ class FirestoreService @Inject constructor(
         }
     }
 
-    suspend fun saveBall(matchId: String, ball: Ball): Result<Unit> {
-        return try {
+    suspend fun saveBall(matchId: String, ball: Ball): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
             firestore.collection("matches")
                 .document(matchId)
                 .collection("balls")
@@ -55,8 +57,8 @@ class FirestoreService @Inject constructor(
         }
     }
 
-    suspend fun saveTournament(tournament: Tournament): Result<Unit> {
-        return try {
+    suspend fun saveTournament(tournament: Tournament): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
             firestore.collection("tournaments").document(tournament.tournamentId).set(tournament).await()
             Result.success(Unit)
         } catch (e: Exception) {

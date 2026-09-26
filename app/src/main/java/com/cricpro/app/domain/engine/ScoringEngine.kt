@@ -96,9 +96,11 @@ class ScoringEngine {
             }
 
             // Batter Stats update
-            val strikerKey = battersMap.keys.find { it == ball.strikerId }
-                ?: battersMap.entries.find { it.value.name == ball.strikerId || it.value.playerId == ball.strikerId }?.key
-                ?: ball.strikerId
+            val strikerKey = if (battersMap.containsKey(ball.strikerId)) {
+                ball.strikerId
+            } else {
+                battersMap.values.find { it.name == ball.strikerId || it.playerId == ball.strikerId }?.playerId ?: ball.strikerId
+            }
 
             val currentBatter = battersMap[strikerKey] ?: BatterScore(playerId = ball.strikerId, name = ball.strikerId)
             val updatedBatter = currentBatter.copy(
@@ -112,18 +114,22 @@ class ScoringEngine {
 
             // Ensure non-striker exists in battersMap
             if (ball.nonStrikerId.isNotBlank()) {
-                val nonStrikerKey = battersMap.keys.find { it == ball.nonStrikerId }
-                    ?: battersMap.entries.find { it.value.name == ball.nonStrikerId || it.value.playerId == ball.nonStrikerId }?.key
-                    ?: ball.nonStrikerId
+                val nonStrikerKey = if (battersMap.containsKey(ball.nonStrikerId)) {
+                    ball.nonStrikerId
+                } else {
+                    battersMap.values.find { it.name == ball.nonStrikerId || it.playerId == ball.nonStrikerId }?.playerId ?: ball.nonStrikerId
+                }
                 if (!battersMap.containsKey(nonStrikerKey)) {
                     battersMap[nonStrikerKey] = BatterScore(playerId = ball.nonStrikerId, name = ball.nonStrikerId)
                 }
             }
 
             // Bowler Stats update
-            val bowlerKey = bowlersMap.keys.find { it == ball.bowlerId }
-                ?: bowlersMap.entries.find { it.value.name == ball.bowlerId || it.value.playerId == ball.bowlerId }?.key
-                ?: ball.bowlerId
+            val bowlerKey = if (bowlersMap.containsKey(ball.bowlerId)) {
+                ball.bowlerId
+            } else {
+                bowlersMap.values.find { it.name == ball.bowlerId || it.playerId == ball.bowlerId }?.playerId ?: ball.bowlerId
+            }
 
             val currentBowler = bowlersMap[bowlerKey] ?: BowlerScore(playerId = ball.bowlerId, name = ball.bowlerId)
             val bowlerRunsThisBall = when (extraType) {
@@ -148,9 +154,11 @@ class ScoringEngine {
             if (ball.wicketType != WicketType.NONE) {
                 totalWickets++
                 val rawDismissedId = ball.dismissedPlayerId ?: ball.strikerId
-                val dismissedKey = battersMap.keys.find { it == rawDismissedId }
-                    ?: battersMap.entries.find { it.value.name == rawDismissedId || it.value.playerId == rawDismissedId }?.key
-                    ?: rawDismissedId
+                val dismissedKey = if (battersMap.containsKey(rawDismissedId)) {
+                    rawDismissedId
+                } else {
+                    battersMap.values.find { it.name == rawDismissedId || it.playerId == rawDismissedId }?.playerId ?: rawDismissedId
+                }
 
                 // Mark dismissed batter
                 val dismissedBatter = battersMap[dismissedKey] ?: BatterScore(playerId = rawDismissedId, name = rawDismissedId)

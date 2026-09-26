@@ -208,6 +208,34 @@ fun HomeScreen(
 
 @Composable
 fun MatchCard(match: Match, onClick: () -> Unit) {
+    fun formatInningsScore(inn: com.cricpro.app.domain.model.Innings?): String {
+        if (inn == null) return "0/0"
+        val runs = inn.totalRuns
+        val wkts = inn.wickets
+        val overs = "${inn.legalBallsBowled / 6}.${inn.legalBallsBowled % 6}"
+        return if (inn.legalBallsBowled > 0) "$runs/$wkts ($overs ov)" else "$runs/$wkts"
+    }
+
+    val teamAScore = remember(match) {
+        val inn = when {
+            match.firstInnings?.battingTeamId == match.teamA.teamId -> match.firstInnings
+            match.secondInnings?.battingTeamId == match.teamA.teamId -> match.secondInnings
+            (match.firstInnings?.totalRuns ?: 0) > 0 -> match.firstInnings
+            else -> match.firstInnings
+        }
+        formatInningsScore(inn)
+    }
+
+    val teamBScore = remember(match) {
+        val inn = when {
+            match.firstInnings?.battingTeamId == match.teamB.teamId -> match.firstInnings
+            match.secondInnings?.battingTeamId == match.teamB.teamId -> match.secondInnings
+            (match.secondInnings?.totalRuns ?: 0) > 0 -> match.secondInnings
+            else -> match.secondInnings
+        }
+        formatInningsScore(inn)
+    }
+
     Card(
         onClick = onClick,
         modifier = Modifier.width(260.dp)
@@ -236,12 +264,12 @@ fun MatchCard(match: Match, onClick: () -> Unit) {
             Spacer(modifier = Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(match.teamA.teamName, fontWeight = FontWeight.Bold)
-                Text("${match.firstInnings?.totalRuns ?: 0}/${match.firstInnings?.wickets ?: 0}")
+                Text(teamAScore)
             }
             Spacer(modifier = Modifier.height(4.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(match.teamB.teamName, fontWeight = FontWeight.Bold)
-                Text("${match.secondInnings?.totalRuns ?: 0}/${match.secondInnings?.wickets ?: 0}")
+                Text(teamBScore)
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
