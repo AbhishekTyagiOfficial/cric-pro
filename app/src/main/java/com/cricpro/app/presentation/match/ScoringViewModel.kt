@@ -440,7 +440,7 @@ class ScoringViewModel @Inject constructor(
 
         val isLegal = extraType != ExtraType.WIDE && extraType != ExtraType.NO_BALL
         val extraRunsVal = when (extraType) {
-            ExtraType.WIDE -> 1
+            ExtraType.WIDE -> if (settingsManager.isWideExtraRunEnabledSync()) 1 else 0
             ExtraType.NO_BALL -> if (settingsManager.isNoBallExtraRunEnabledSync()) 1 else 0
             else -> 0
         }

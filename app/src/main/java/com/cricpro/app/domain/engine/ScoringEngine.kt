@@ -143,7 +143,7 @@ class ScoringEngine {
                 name = if (currentBowler.name.isNotBlank()) currentBowler.name else ball.bowlerId,
                 legalBalls = if (isLegal) currentBowler.legalBalls + 1 else currentBowler.legalBalls,
                 runsConceded = currentBowler.runsConceded + bowlerRunsThisBall,
-                wides = if (extraType == ExtraType.WIDE) currentBowler.wides + extraRuns else currentBowler.wides,
+                wides = if (extraType == ExtraType.WIDE) currentBowler.wides + 1 else currentBowler.wides,
                 noBalls = if (extraType == ExtraType.NO_BALL) currentBowler.noBalls + 1 else currentBowler.noBalls
             )
             bowlersMap[bowlerKey] = updatedBowler
@@ -206,9 +206,7 @@ class ScoringEngine {
             var swapStriker = false
             when (extraType) {
                 ExtraType.WIDE -> {
-                    // If additional runs scored on wide is odd
-                    val additionalRunsOnWide = extraRuns - 1
-                    if (additionalRunsOnWide % 2 != 0) swapStriker = true
+                    if (runsScored % 2 != 0) swapStriker = true
                 }
                 ExtraType.NO_BALL, ExtraType.NONE -> {
                     if (runsScored % 2 != 0) swapStriker = true

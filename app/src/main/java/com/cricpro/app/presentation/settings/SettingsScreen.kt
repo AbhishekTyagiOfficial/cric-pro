@@ -44,6 +44,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val isNoBallExtraRunEnabled by viewModel.isNoBallExtraRunEnabled.collectAsState()
+    val isWideExtraRunEnabled by viewModel.isWideExtraRunEnabled.collectAsState()
 
     Scaffold(
         topBar = {
@@ -64,6 +65,18 @@ fun SettingsScreen(
                     Switch(
                         checked = isNoBallExtraRunEnabled,
                         onCheckedChange = { viewModel.setNoBallExtraRunEnabled(it) }
+                    )
+                }
+            )
+            Divider()
+
+            ListItem(
+                headlineContent = { Text("Wide Extra Run", fontWeight = FontWeight.SemiBold) },
+                supportingContent = { Text("Automatically add 1 run as Extra for every Wide") },
+                trailingContent = {
+                    Switch(
+                        checked = isWideExtraRunEnabled,
+                        onCheckedChange = { viewModel.setWideExtraRunEnabled(it) }
                     )
                 }
             )

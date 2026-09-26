@@ -12,8 +12,13 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     val isNoBallExtraRunEnabled: StateFlow<Boolean> = settingsManager.isNoBallExtraRunEnabled
+    val isWideExtraRunEnabled: StateFlow<Boolean> = settingsManager.isWideExtraRunEnabled
 
     fun setNoBallExtraRunEnabled(enabled: Boolean) {
         settingsManager.setNoBallExtraRunEnabled(enabled)
+    }
+
+    fun setWideExtraRunEnabled(enabled: Boolean) {
+        settingsManager.setWideExtraRunEnabled(enabled)
     }
 }

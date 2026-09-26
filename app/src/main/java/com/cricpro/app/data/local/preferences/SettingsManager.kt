@@ -16,12 +16,18 @@ class SettingsManager @Inject constructor(
 
     companion object {
         private const val KEY_NO_BALL_EXTRA_RUN_ENABLED = "no_ball_extra_run_enabled"
+        private const val KEY_WIDE_EXTRA_RUN_ENABLED = "wide_extra_run_enabled"
     }
 
     private val _isNoBallExtraRunEnabled = MutableStateFlow(
         prefs.getBoolean(KEY_NO_BALL_EXTRA_RUN_ENABLED, true)
     )
     val isNoBallExtraRunEnabled: StateFlow<Boolean> = _isNoBallExtraRunEnabled.asStateFlow()
+
+    private val _isWideExtraRunEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_WIDE_EXTRA_RUN_ENABLED, true)
+    )
+    val isWideExtraRunEnabled: StateFlow<Boolean> = _isWideExtraRunEnabled.asStateFlow()
 
     fun setNoBallExtraRunEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_NO_BALL_EXTRA_RUN_ENABLED, enabled).apply()
@@ -30,5 +36,14 @@ class SettingsManager @Inject constructor(
 
     fun isNoBallExtraRunEnabledSync(): Boolean {
         return prefs.getBoolean(KEY_NO_BALL_EXTRA_RUN_ENABLED, true)
+    }
+
+    fun setWideExtraRunEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_WIDE_EXTRA_RUN_ENABLED, enabled).apply()
+        _isWideExtraRunEnabled.value = enabled
+    }
+
+    fun isWideExtraRunEnabledSync(): Boolean {
+        return prefs.getBoolean(KEY_WIDE_EXTRA_RUN_ENABLED, true)
     }
 }

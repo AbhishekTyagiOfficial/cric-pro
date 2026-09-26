@@ -169,68 +169,6 @@ class FirebaseAuthService @Inject constructor(
         }
     }
 
-    suspend fun syncUserDataFromCloud(userId: String) {
-        if (userId.isBlank() || userId == "guest") return
-        withContext(Dispatchers.IO) {
-            try {
-                val cloudTeams = firestoreService.getTeamsByOwner(userId)
-                cloudTeams.forEach { team ->
-                    val teamEntity = com.cricpro.app.data.local.entity.TeamEntity(
-                        teamId = team.teamId,
-                        teamName = team.teamName,
-                        teamLogo = team.teamLogo,
-                        ownerId = team.ownerId,
-                        captainId = team.captainId,
-                        viceCaptainId = team.viceCaptainId,
-                        createdAt = team.createdAt,
-                        updatedAt = team.updatedAt
-                    )
-                    database.teamDao().insertTeam(teamEntity)
-                    team.players.forEach { player ->
-                        val playerEntity = com.cricpro.app.data.local.entity.PlayerEntity(
-                            playerId = player.playerId,
-                            teamId = team.teamId,
-                            name = player.name,
-                            profilePhoto = player.profilePhoto,
-                            role = player.role.name,
-                            battingStyle = player.battingStyle.name,
-                            bowlingStyle = player.bowlingStyle.name,
-                            isCaptain = player.isCaptain,
-                            isViceCaptain = player.isViceCaptain,
-                            matches = player.stats.matches,
-                            runs = player.stats.runs,
-                            wickets = player.stats.wickets,
-                            ballsFaced = player.stats.ballsFaced,
-                            highestScore = player.stats.highestScore,
-                            oversBowled = player.stats.oversBowled,
-                            runsConceded = player.stats.runsConceded
-                        )
-                        database.playerDao().insertPlayer(playerEntity)
-                    }
-                }
-                val cloudMatches = firestoreService.getMatchesByCreator(userId)
-                cloudMatches.forEach { match ->
-                    val matchEntity = match.toEntity()
-                    database.matchDao().insertMatch(matchEntity)
-                }
-                val cloudTournaments = firestoreService.getTournamentsByOrganizer(userId)
-                cloudTournaments.forEach { tour ->
-                    val tourEntity = com.cricpro.app.data.local.entity.TournamentEntity(
-                        tournamentId = tour.tournamentId,
-                        name = tour.name,
-                        logoUrl = tour.logoUrl,
-                        type = tour.type.name,
-                        organizerId = tour.organizerId,
-                        startDate = tour.startDate,
-                        endDate = tour.endDate,
-                        tournamentJson = ""
-                    )
-                    database.tournamentDao().insertTournament(tourEntity)
-                }
-            } catch (_: Exception) { }
-        }
-    }
-
     private fun isValidEmail(email: String): Boolean {
         val trimmed = email.trim()
         return trimmed.contains("@") && trimmed.contains(".") && trimmed.length > 5
