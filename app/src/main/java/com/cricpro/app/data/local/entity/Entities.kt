@@ -3,37 +3,77 @@ package com.cricpro.app.data.local.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
+import com.cricpro.app.domain.model.Player
+import com.cricpro.app.domain.model.PlayerRole
+import com.cricpro.app.domain.model.BattingStyle
+import com.cricpro.app.domain.model.BowlingStyle
+import com.cricpro.app.domain.model.Team
+
 @Entity(tableName = "teams")
 data class TeamEntity(
-    @PrimaryKey val teamId: String,
-    val teamName: String,
-    val teamLogo: String,
-    val ownerId: String,
-    val captainId: String?,
-    val viceCaptainId: String?,
-    val createdAt: Long,
-    val updatedAt: Long
+    @PrimaryKey val teamId: String = "",
+    val teamName: String = "",
+    val teamLogo: String = "",
+    val ownerId: String = "",
+    val captainId: String? = null,
+    val viceCaptainId: String? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
 )
+
+fun Team.toTeamEntity(): TeamEntity {
+    return TeamEntity(
+        teamId = teamId,
+        teamName = teamName,
+        teamLogo = teamLogo,
+        ownerId = ownerId,
+        captainId = captainId,
+        viceCaptainId = viceCaptainId,
+        createdAt = createdAt,
+        updatedAt = updatedAt
+    )
+}
 
 @Entity(tableName = "players")
 data class PlayerEntity(
-    @PrimaryKey val playerId: String,
-    val teamId: String,
-    val name: String,
-    val profilePhoto: String,
-    val role: String,
-    val battingStyle: String,
-    val bowlingStyle: String,
-    val isCaptain: Boolean,
-    val isViceCaptain: Boolean,
-    val matches: Int,
-    val runs: Int,
-    val wickets: Int,
-    val ballsFaced: Int,
-    val highestScore: Int,
-    val oversBowled: Double,
-    val runsConceded: Int
+    @PrimaryKey val playerId: String = "",
+    val teamId: String = "",
+    val name: String = "",
+    val profilePhoto: String = "",
+    val role: String = "ALL_ROUNDER",
+    val battingStyle: String = "RIGHT_HAND",
+    val bowlingStyle: String = "RIGHT_ARM_MEDIUM",
+    val isCaptain: Boolean = false,
+    val isViceCaptain: Boolean = false,
+    val matches: Int = 0,
+    val runs: Int = 0,
+    val wickets: Int = 0,
+    val ballsFaced: Int = 0,
+    val highestScore: Int = 0,
+    val oversBowled: Double = 0.0,
+    val runsConceded: Int = 0
 )
+
+fun Player.toPlayerEntity(): PlayerEntity {
+    return PlayerEntity(
+        playerId = playerId,
+        teamId = teamId,
+        name = name,
+        profilePhoto = profilePhoto,
+        role = role.name,
+        battingStyle = battingStyle.name,
+        bowlingStyle = bowlingStyle.name,
+        isCaptain = isCaptain,
+        isViceCaptain = isViceCaptain,
+        matches = stats.matches,
+        runs = stats.runs,
+        wickets = stats.wickets,
+        ballsFaced = stats.ballsFaced,
+        highestScore = stats.highestScore,
+        oversBowled = stats.oversBowled,
+        runsConceded = stats.runsConceded
+    )
+}
 
 @Entity(tableName = "matches")
 data class MatchEntity(

@@ -52,4 +52,10 @@ class TeamViewModel @Inject constructor(
             assignViceCaptainUseCase(teamId, playerId)
         }
     }
+
+    fun deleteTeam(teamId: String) {
+        viewModelScope.launch {
+            teamRepository.deleteTeam(teamId)
+        }
+    }
 }

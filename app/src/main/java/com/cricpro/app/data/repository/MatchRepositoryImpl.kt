@@ -2,8 +2,7 @@ package com.cricpro.app.data.repository
 
 import com.cricpro.app.data.local.dao.BallDao
 import com.cricpro.app.data.local.dao.MatchDao
-import com.cricpro.app.data.local.entity.BallEntity
-import com.cricpro.app.data.local.entity.MatchEntity
+import com.cricpro.app.data.local.entity.*
 import com.cricpro.app.data.remote.FirestoreService
 import com.cricpro.app.domain.model.*
 import com.cricpro.app.domain.repository.MatchRepository
@@ -15,8 +14,13 @@ import javax.inject.Inject
 
 import com.cricpro.app.data.remote.FirebaseAuthService
 
+import com.cricpro.app.data.local.dao.PlayerDao
+import com.cricpro.app.data.local.dao.TeamDao
+
 class MatchRepositoryImpl @Inject constructor(
     private val matchDao: MatchDao,
+    private val teamDao: TeamDao,
+    private val playerDao: PlayerDao,
     private val firestoreService: FirestoreService,
     private val authService: FirebaseAuthService
 ) : MatchRepository {
@@ -57,6 +61,22 @@ class MatchRepositoryImpl @Inject constructor(
                 secondInnings = Innings(inningsNumber = 2, battingTeamId = match.teamB.teamId, bowlingTeamId = match.teamA.teamId)
             )
             matchDao.insertMatch(finalMatch.toEntity())
+            try {
+                if (match.teamA.teamId.isNotBlank()) {
+                    teamDao.insertTeam(match.teamA.copy(ownerId = match.teamA.ownerId.ifBlank { currentCreator }).toTeamEntity())
+                    match.teamA.players.forEach { p ->
+                        val pId = if (p.playerId.isNotBlank()) p.playerId else "player_${System.currentTimeMillis()}_${p.name.hashCode()}"
+                        playerDao.insertPlayer(p.copy(playerId = pId, teamId = match.teamA.teamId).toPlayerEntity())
+                    }
+                }
+                if (match.teamB.teamId.isNotBlank()) {
+                    teamDao.insertTeam(match.teamB.copy(ownerId = match.teamB.ownerId.ifBlank { currentCreator }).toTeamEntity())
+                    match.teamB.players.forEach { p ->
+                        val pId = if (p.playerId.isNotBlank()) p.playerId else "player_${System.currentTimeMillis()}_${p.name.hashCode()}"
+                        playerDao.insertPlayer(p.copy(playerId = pId, teamId = match.teamB.teamId).toPlayerEntity())
+                    }
+                }
+            } catch (e: Exception) {}
             try { kotlinx.coroutines.withTimeoutOrNull(2000) { firestoreService.saveMatch(finalMatch) } } catch (e: Exception) {}
             Result.success(matchId)
         } catch (e: Exception) {
@@ -70,7 +90,12 @@ class MatchRepositoryImpl @Inject constructor(
             val currentMatch = matchEntity.toDomain()
 
             val isWinnerTeamA = tossWinnerId == currentMatch.teamA.teamId ||
-                (currentMatch.teamA.teamName.isNotBlank() && tossWinnerId.equals(currentMatch.teamA.teamName, ignoreCase = true))
+                tossWinnerId == "t1" ||
+                (currentMatch.teamA.teamName.isNotBlank() && (
+                    tossWinnerId.equals(currentMatch.teamA.teamName, ignoreCase = true) ||
+                    currentMatch.teamA.teamName.contains(tossWinnerId, ignoreCase = true) ||
+                    tossWinnerId.contains(currentMatch.teamA.teamName, ignoreCase = true)
+                ))
 
             val isBattingTeamA = if (decision == TossDecision.BAT) isWinnerTeamA else !isWinnerTeamA
 
@@ -194,7 +219,13 @@ fun Match.toEntity(): MatchEntity {
 }
 
 fun MatchEntity.toDomain(): Match {
-    val isWinnerTeamA = tossWinnerId == teamAId || (teamAName.isNotBlank() && tossWinnerId.equals(teamAName, ignoreCase = true))
+    val winnerId = tossWinnerId ?: ""
+    val isWinnerTeamA = winnerId == teamAId || winnerId == "t1" ||
+        (teamAName.isNotBlank() && (
+            winnerId.equals(teamAName, ignoreCase = true) ||
+            teamAName.contains(winnerId, ignoreCase = true) ||
+            winnerId.contains(teamAName, ignoreCase = true)
+        ))
     val isBattingTeamA = if (tossDecision?.uppercase() == "BAT") isWinnerTeamA else !isWinnerTeamA
 
     val battingA = if (isBattingTeamA) teamAId else teamBId
@@ -226,6 +257,11 @@ fun MatchEntity.toDomain(): Match {
 
     if (inn1 == null) inn1 = Innings(1, battingA, bowlingA)
     if (inn2 == null) inn2 = Innings(2, bowlingA, battingA)
+
+    if (inn1.legalBallsBowled == 0 && !tossDecision.isNullOrBlank() && !tossWinnerId.isNullOrBlank()) {
+        inn1 = inn1.copy(battingTeamId = battingA, bowlingTeamId = bowlingA)
+        inn2 = inn2.copy(battingTeamId = bowlingA, bowlingTeamId = battingA)
+    }
 
     return Match(
         matchId = matchId,

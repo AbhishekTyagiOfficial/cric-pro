@@ -120,7 +120,7 @@ fun TossScreen(
     val uiState by viewModel.uiState.collectAsState()
     val match = uiState.currentMatch
 
-    var selectedTossWinnerId by remember { mutableStateOf<String?>(null) }
+    var selectedTossWinnerIsTeamA by remember { mutableStateOf(true) }
     var selectedDecision by remember { mutableStateOf(TossDecision.BAT) }
     var isTossSubmitting by remember { mutableStateOf(false) }
 
@@ -137,14 +137,14 @@ fun TossScreen(
 
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 FilterChip(
-                    selected = selectedTossWinnerId == (match?.teamA?.teamId ?: "t1"),
-                    onClick = { selectedTossWinnerId = match?.teamA?.teamId ?: "t1" },
-                    label = { Text(match?.teamA?.teamName ?: "Team A") }
+                    selected = selectedTossWinnerIsTeamA,
+                    onClick = { selectedTossWinnerIsTeamA = true },
+                    label = { Text(match?.teamA?.teamName?.takeIf { it.isNotBlank() } ?: "Team A") }
                 )
                 FilterChip(
-                    selected = selectedTossWinnerId == (match?.teamB?.teamId ?: "t2"),
-                    onClick = { selectedTossWinnerId = match?.teamB?.teamId ?: "t2" },
-                    label = { Text(match?.teamB?.teamName ?: "Team B") }
+                    selected = !selectedTossWinnerIsTeamA,
+                    onClick = { selectedTossWinnerIsTeamA = false },
+                    label = { Text(match?.teamB?.teamName?.takeIf { it.isNotBlank() } ?: "Team B") }
                 )
             }
 
@@ -164,7 +164,9 @@ fun TossScreen(
                 onClick = {
                     if (isTossSubmitting) return@Button
                     isTossSubmitting = true
-                    val winnerId = selectedTossWinnerId ?: (match?.teamA?.teamId ?: "t1")
+                    val winnerTeam = if (selectedTossWinnerIsTeamA) match?.teamA else match?.teamB
+                    val winnerId = winnerTeam?.teamId?.takeIf { it.isNotBlank() }
+                        ?: if (selectedTossWinnerIsTeamA) "t1" else "t2"
                     viewModel.selectToss(winnerId, selectedDecision)
                     onTossComplete()
                 },

@@ -23,11 +23,23 @@ class TournamentRepositoryImpl @Inject constructor(
     private val authService: FirebaseAuthService
 ) : TournamentRepository {
 
+    private fun isTournamentOwnedByUser(organizerId: String, currentUid: String): Boolean {
+        if (organizerId.isBlank() || organizerId == "guest" || currentUid == "guest") return true
+        if (organizerId == currentUid) return true
+        val cleanCurrent = currentUid.lowercase().removePrefix("user_").removePrefix("google_")
+        val cleanOrganizer = organizerId.lowercase().removePrefix("user_").removePrefix("google_")
+        if (cleanCurrent == cleanOrganizer) return true
+        val restoredCurrent = cleanCurrent.replace("_", ".")
+        val restoredOrganizer = cleanOrganizer.replace("_", ".")
+        if (restoredCurrent == restoredOrganizer || restoredCurrent.startsWith(restoredOrganizer) || restoredOrganizer.startsWith(restoredCurrent)) return true
+        return false
+    }
+
     override fun getTournaments(): Flow<List<Tournament>> {
         val currentUid = authService.currentUserId ?: "guest"
         return tournamentDao.getTournaments().map { list ->
             list.map { it.toDomain() }.filter {
-                it.organizerId.isBlank() || currentUid.isBlank() || it.organizerId == currentUid
+                isTournamentOwnedByUser(it.organizerId, currentUid)
             }
         }
     }

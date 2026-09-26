@@ -30,6 +30,9 @@ interface PlayerDao {
     @Query("SELECT * FROM players WHERE teamId = :teamId")
     fun getPlayersForTeam(teamId: String): Flow<List<PlayerEntity>>
 
+    @Query("SELECT * FROM players WHERE teamId = :teamId")
+    suspend fun getPlayersForTeamDirect(teamId: String): List<PlayerEntity>
+
     @Query("SELECT * FROM players WHERE playerId = :playerId")
     fun getPlayerById(playerId: String): Flow<PlayerEntity?>
 

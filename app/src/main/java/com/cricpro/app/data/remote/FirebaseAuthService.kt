@@ -13,12 +13,16 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
+import com.cricpro.app.data.repository.toEntity
+import kotlinx.coroutines.launch
+
 @Singleton
 class FirebaseAuthService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
-    private val database: CricProDatabase
+    private val database: CricProDatabase,
+    private val firestoreService: FirestoreService
 ) {
     private val activeOtps = ConcurrentHashMap<String, String>()
     private val registeredUsers = ConcurrentHashMap<String, User>()
@@ -38,11 +42,104 @@ class FirebaseAuthService @Inject constructor(
         }
 
     private fun setActiveUserEmail(email: String) {
-        prefs.edit().putString("active_logged_in_email", email.trim().lowercase()).apply()
+        val clean = email.trim().lowercase()
+        prefs.edit().putString("active_logged_in_email", clean).apply()
+        val uid = "user_${clean.replace(".", "_")}"
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            try {
+                syncUserDataFromCloud(uid)
+            } catch (_: Exception) { }
+        }
     }
 
     private fun clearActiveUserEmail() {
         prefs.edit().remove("active_logged_in_email").remove("guest_session_id").apply()
+    }
+
+    suspend fun syncUserDataFromCloud(userId: String) {
+        if (userId.isBlank() || userId == "guest") return
+        withContext(Dispatchers.IO) {
+            try {
+                val cloudTeams = firestoreService.getTeamsByOwner(userId)
+                cloudTeams.forEach { team ->
+                    val teamEntity = com.cricpro.app.data.local.entity.TeamEntity(
+                        teamId = team.teamId,
+                        teamName = team.teamName,
+                        teamLogo = team.teamLogo,
+                        ownerId = team.ownerId,
+                        captainId = team.captainId,
+                        viceCaptainId = team.viceCaptainId,
+                        createdAt = team.createdAt,
+                        updatedAt = team.updatedAt
+                    )
+                    database.teamDao().insertTeam(teamEntity)
+                    team.players.forEach { player ->
+                        val playerEntity = com.cricpro.app.data.local.entity.PlayerEntity(
+                            playerId = player.playerId,
+                            teamId = team.teamId,
+                            name = player.name,
+                            profilePhoto = player.profilePhoto,
+                            role = player.role.name,
+                            battingStyle = player.battingStyle.name,
+                            bowlingStyle = player.bowlingStyle.name,
+                            isCaptain = player.isCaptain,
+                            isViceCaptain = player.isViceCaptain,
+                            matches = player.stats.matches,
+                            runs = player.stats.runs,
+                            wickets = player.stats.wickets,
+                            ballsFaced = player.stats.ballsFaced,
+                            highestScore = player.stats.highestScore,
+                            oversBowled = player.stats.oversBowled,
+                            runsConceded = player.stats.runsConceded
+                        )
+                        database.playerDao().insertPlayer(playerEntity)
+                    }
+                }
+                val cloudMatches = firestoreService.getMatchesByCreator(userId)
+                cloudMatches.forEach { match ->
+                    val matchEntity = match.toEntity()
+                    database.matchDao().insertMatch(matchEntity)
+                    try {
+                        val balls = firestoreService.getBallsForMatch(match.matchId)
+                        balls.forEach { ball ->
+                            database.ballDao().insertBall(
+                                com.cricpro.app.data.local.entity.BallEntity(
+                                    ballId = if (ball.ballId.isNotBlank()) ball.ballId else "ball_${System.currentTimeMillis()}",
+                                    matchId = match.matchId,
+                                    inningsNumber = ball.inningsNumber,
+                                    overNumber = ball.overNumber,
+                                    ballNumberInOver = ball.ballNumberInOver,
+                                    strikerId = ball.strikerId,
+                                    nonStrikerId = ball.nonStrikerId,
+                                    bowlerId = ball.bowlerId,
+                                    runsScored = ball.runsScored,
+                                    extraType = ball.extraType.name,
+                                    extraRuns = ball.extraRuns,
+                                    isLegalDelivery = ball.isLegalDelivery,
+                                    wicketType = ball.wicketType.name,
+                                    dismissedPlayerId = ball.dismissedPlayerId,
+                                    timestamp = ball.timestamp
+                                )
+                            )
+                        }
+                    } catch (_: Exception) { }
+                }
+                val cloudTournaments = firestoreService.getTournamentsByOrganizer(userId)
+                cloudTournaments.forEach { tour ->
+                    val tourEntity = com.cricpro.app.data.local.entity.TournamentEntity(
+                        tournamentId = tour.tournamentId,
+                        name = tour.name,
+                        logoUrl = tour.logoUrl,
+                        type = tour.type.name,
+                        organizerId = tour.organizerId,
+                        startDate = tour.startDate,
+                        endDate = tour.endDate,
+                        tournamentJson = ""
+                    )
+                    database.tournamentDao().insertTournament(tourEntity)
+                }
+            } catch (_: Exception) { }
+        }
     }
 
     suspend fun clearLocalData() {
@@ -209,6 +306,9 @@ class FirebaseAuthService @Inject constructor(
         if (!isValidEmail(cleanEmail)) {
             return Result.failure(Exception("Please enter a valid email address (e.g. name@domain.com)"))
         }
+        if (password.isBlank()) {
+            return Result.failure(Exception("Please enter your password"))
+        }
 
         val registeredUser = getRegisteredUser(cleanEmail, allowFallback = false)
             ?: return Result.failure(Exception("User ID not registered. Please sign up to create an account."))
@@ -218,7 +318,18 @@ class FirebaseAuthService @Inject constructor(
             setActiveUserEmail(cleanEmail)
             Result.success(registeredUser)
         } catch (e: Exception) {
-            Result.failure(Exception("Incorrect password. Please enter the correct password."))
+            val msg = e.message ?: ""
+            when {
+                msg.contains("password", ignoreCase = true) ||
+                msg.contains("credential", ignoreCase = true) ||
+                msg.contains("invalid", ignoreCase = true) ->
+                    Result.failure(Exception("Incorrect password. Please enter the correct password."))
+                msg.contains("network", ignoreCase = true) ||
+                msg.contains("unable to resolve", ignoreCase = true) ->
+                    Result.failure(Exception("No internet connection. Please check your network and try again."))
+                else ->
+                    Result.failure(Exception("Incorrect password. Please enter the correct password."))
+            }
         }
     }
 
@@ -291,8 +402,12 @@ class FirebaseAuthService @Inject constructor(
         val registeredUser = getRegisteredUser(cleanEmail, allowFallback = false)
             ?: return Result.failure(Exception("User ID not registered. Please sign up to create an account."))
 
-        if (registeredUser.securityPin.isNotBlank() && registeredUser.securityPin != trimmedPin) {
-            return Result.failure(Exception("Incorrect 4-digit Security PIN."))
+        if (registeredUser.securityPin.isBlank()) {
+            return Result.failure(Exception("No Security PIN set for this account. Please use email/password login instead."))
+        }
+
+        if (registeredUser.securityPin != trimmedPin) {
+            return Result.failure(Exception("Incorrect 4-digit Security PIN. Please try again."))
         }
 
         setActiveUserEmail(cleanEmail)

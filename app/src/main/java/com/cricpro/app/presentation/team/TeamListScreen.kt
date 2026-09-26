@@ -1,6 +1,8 @@
 package com.cricpro.app.presentation.team
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,7 +20,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.cricpro.app.domain.model.Player
 import com.cricpro.app.domain.model.Team
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TeamListScreen(
     onNavigateToTeamDetail: (String) -> Unit,
@@ -27,6 +29,7 @@ fun TeamListScreen(
     val teams by viewModel.teams.collectAsState()
     var showCreateDialog by remember { mutableStateOf(false) }
     var newTeamName by remember { mutableStateOf("") }
+    var teamToDelete by remember { mutableStateOf<Team?>(null) }
 
     Scaffold(
         topBar = {
@@ -44,7 +47,12 @@ fun TeamListScreen(
         ) {
             items(teams) { team ->
                 Card(
-                    modifier = Modifier.fillMaxWidth().clickable { onNavigateToTeamDetail(team.teamId) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .combinedClickable(
+                            onClick = { onNavigateToTeamDetail(team.teamId) },
+                            onLongClick = { teamToDelete = team }
+                        ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Row(
@@ -56,7 +64,16 @@ fun TeamListScreen(
                             Text(team.teamName, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                             Text("${team.players.size} Players", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Icon(Icons.Default.ChevronRight, contentDescription = null)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { teamToDelete = team }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Delete Team",
+                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                                )
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null)
+                        }
                     }
                 }
             }
@@ -85,6 +102,30 @@ fun TeamListScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showCreateDialog = false }) { Text("Cancel") }
+                }
+            )
+        }
+
+        teamToDelete?.let { team ->
+            AlertDialog(
+                onDismissRequest = { teamToDelete = null },
+                title = { Text("Delete Team?") },
+                text = { Text("Are you sure you want to permanently delete '${team.teamName}' and all its players? This will remove the team from both local database and Firebase.") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.deleteTeam(team.teamId)
+                            teamToDelete = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Delete")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { teamToDelete = null }) {
+                        Text("Cancel")
+                    }
                 }
             )
         }

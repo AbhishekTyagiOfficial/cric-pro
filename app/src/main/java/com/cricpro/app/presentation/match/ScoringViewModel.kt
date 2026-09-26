@@ -71,8 +71,21 @@ class ScoringViewModel @Inject constructor(
                 ) { rawMatch, teams, balls1, balls2 ->
                     if (rawMatch == null) null
                     else {
-                        val tA = teams.find { it.teamId == rawMatch.teamA.teamId || (it.teamName.equals(rawMatch.teamA.teamName, ignoreCase = true) && rawMatch.teamA.teamName.isNotBlank()) } ?: rawMatch.teamA
-                        val tB = teams.find { (it.teamId == rawMatch.teamB.teamId || (it.teamName.equals(rawMatch.teamB.teamName, ignoreCase = true) && rawMatch.teamB.teamName.isNotBlank())) && (tA.teamId.isBlank() || it.teamId != tA.teamId) } ?: rawMatch.teamB
+                        val foundTA = teams.find { it.teamId == rawMatch.teamA.teamId || (it.teamName.equals(rawMatch.teamA.teamName, ignoreCase = true) && rawMatch.teamA.teamName.isNotBlank()) }
+                        val tA = when {
+                            foundTA != null && foundTA.players.isNotEmpty() -> foundTA
+                            rawMatch.teamA.players.isNotEmpty() -> rawMatch.teamA
+                            foundTA != null -> foundTA
+                            else -> rawMatch.teamA
+                        }
+
+                        val foundTB = teams.find { (it.teamId == rawMatch.teamB.teamId || (it.teamName.equals(rawMatch.teamB.teamName, ignoreCase = true) && rawMatch.teamB.teamName.isNotBlank())) && (tA.teamId.isBlank() || it.teamId != tA.teamId) }
+                        val tB = when {
+                            foundTB != null && foundTB.players.isNotEmpty() -> foundTB
+                            rawMatch.teamB.players.isNotEmpty() -> rawMatch.teamB
+                            foundTB != null -> foundTB
+                            else -> rawMatch.teamB
+                        }
                         val fullMatch = rawMatch.copy(teamA = tA, teamB = tB)
                         Triple(fullMatch, balls1, balls2)
                     }
@@ -83,8 +96,33 @@ class ScoringViewModel @Inject constructor(
                     val totalOvers = match.totalOvers
                     val scoringEngine = com.cricpro.app.domain.engine.ScoringEngine()
 
-                    val inn1Base = match.firstInnings ?: Innings(1, match.teamA.teamId, match.teamB.teamId)
-                    val inn2Base = match.secondInnings ?: Innings(2, match.teamB.teamId, match.teamA.teamId)
+                    val rawInn1 = match.firstInnings ?: Innings(1, match.teamA.teamId, match.teamB.teamId)
+                    val rawInn2 = match.secondInnings ?: Innings(2, match.teamB.teamId, match.teamA.teamId)
+
+                    val tossWinnerIdStr = match.tossWinnerId ?: ""
+                    val isWinnerTeamA = tossWinnerIdStr == match.teamA.teamId ||
+                        tossWinnerIdStr == "t1" ||
+                        (match.teamA.teamName.isNotBlank() && (
+                            tossWinnerIdStr.equals(match.teamA.teamName, ignoreCase = true) ||
+                            match.teamA.teamName.contains(tossWinnerIdStr, ignoreCase = true) ||
+                            tossWinnerIdStr.contains(match.teamA.teamName, ignoreCase = true)
+                        ))
+
+                    val tossBattingTeamA = if (match.tossDecision == TossDecision.BAT) isWinnerTeamA else !isWinnerTeamA
+                    val correctBattingTeamId = if (tossBattingTeamA) match.teamA.teamId else match.teamB.teamId
+                    val correctBowlingTeamId = if (tossBattingTeamA) match.teamB.teamId else match.teamA.teamId
+
+                    val inn1Base = if (balls1.isEmpty() && match.tossDecision != null && !match.tossWinnerId.isNullOrBlank()) {
+                        rawInn1.copy(battingTeamId = correctBattingTeamId, bowlingTeamId = correctBowlingTeamId)
+                    } else {
+                        rawInn1
+                    }
+
+                    val inn2Base = if (balls1.isEmpty() && match.tossDecision != null && !match.tossWinnerId.isNullOrBlank()) {
+                        rawInn2.copy(battingTeamId = correctBowlingTeamId, bowlingTeamId = correctBattingTeamId)
+                    } else {
+                        rawInn2
+                    }
 
                     fun getMaxWicketsForTeam(team: Team): Int {
                         return if (team.players.size > 1) (team.players.size - 1).coerceAtMost(10) else 10
@@ -191,9 +229,9 @@ class ScoringViewModel @Inject constructor(
                     val batTeamActive = if (isBattingTeamA) match.teamA else match.teamB
                     val bowlTeamActive = if (isBattingTeamA) match.teamB else match.teamA
 
-                    val defaultStriker = batTeamActive.players.getOrNull(0)?.name ?: if (batTeamActive.teamName.isNotBlank()) "${batTeamActive.teamName} Player 1" else "Player 1"
-                    val defaultNonStriker = batTeamActive.players.getOrNull(1)?.name ?: if (batTeamActive.teamName.isNotBlank()) "${batTeamActive.teamName} Player 2" else "Player 2"
-                    val defaultBowler = bowlTeamActive.players.getOrNull(0)?.name ?: if (bowlTeamActive.teamName.isNotBlank()) "${bowlTeamActive.teamName} Bowler 1" else "Bowler 1"
+                    val defaultStriker = batTeamActive.players.getOrNull(0)?.name ?: "Player 1"
+                    val defaultNonStriker = batTeamActive.players.getOrNull(1)?.name ?: "Player 2"
+                    val defaultBowler = bowlTeamActive.players.getOrNull(0)?.name ?: "Bowler 1"
 
                     if (_overrideBowlerId.value != null && match.currentBowlerId == _overrideBowlerId.value) {
                         _overrideBowlerId.value = null
@@ -421,6 +459,34 @@ class ScoringViewModel @Inject constructor(
 
     fun selectToss(tossWinnerId: String, decision: TossDecision) {
         if (matchId.isBlank()) return
+        val currentM = _uiState.value.currentMatch
+        if (currentM != null) {
+            val isWinnerTeamA = tossWinnerId == currentM.teamA.teamId ||
+                tossWinnerId == "t1" ||
+                (currentM.teamA.teamName.isNotBlank() && (
+                    tossWinnerId.equals(currentM.teamA.teamName, ignoreCase = true) ||
+                    currentM.teamA.teamName.contains(tossWinnerId, ignoreCase = true) ||
+                    tossWinnerId.contains(currentM.teamA.teamName, ignoreCase = true)
+                ))
+
+            val isBattingTeamA = if (decision == TossDecision.BAT) isWinnerTeamA else !isWinnerTeamA
+
+            val battingTeamId = if (isBattingTeamA) currentM.teamA.teamId else currentM.teamB.teamId
+            val bowlingTeamId = if (isBattingTeamA) currentM.teamB.teamId else currentM.teamA.teamId
+
+            val updatedInnings1 = Innings(1, battingTeamId = battingTeamId, bowlingTeamId = bowlingTeamId)
+            val updatedInnings2 = Innings(2, battingTeamId = bowlingTeamId, bowlingTeamId = battingTeamId)
+
+            val updated = currentM.copy(
+                tossWinnerId = tossWinnerId,
+                tossDecision = decision,
+                status = MatchStatus.IN_PROGRESS,
+                firstInnings = updatedInnings1,
+                secondInnings = updatedInnings2,
+                updatedAt = System.currentTimeMillis()
+            )
+            _uiState.value = _uiState.value.copy(currentMatch = updated)
+        }
         viewModelScope.launch {
             matchRepository.updateMatchToss(matchId, tossWinnerId, decision)
         }
@@ -476,9 +542,9 @@ class ScoringViewModel @Inject constructor(
             val batTeam2 = if (inn2?.battingTeamId == currentM.teamA.teamId) currentM.teamA else currentM.teamB
             val bowlTeam2 = if (inn2?.bowlingTeamId == currentM.teamA.teamId) currentM.teamA else currentM.teamB
 
-            val defaultStriker2 = batTeam2.players.getOrNull(0)?.name ?: if (batTeam2.teamName.isNotBlank()) "${batTeam2.teamName} Player 1" else "Player 1"
-            val defaultNonStriker2 = batTeam2.players.getOrNull(1)?.name ?: if (batTeam2.teamName.isNotBlank()) "${batTeam2.teamName} Player 2" else "Player 2"
-            val defaultBowler2 = bowlTeam2.players.getOrNull(0)?.name ?: if (bowlTeam2.teamName.isNotBlank()) "${bowlTeam2.teamName} Bowler 1" else "Bowler 1"
+            val defaultStriker2 = batTeam2.players.getOrNull(0)?.name ?: "Player 1"
+            val defaultNonStriker2 = batTeam2.players.getOrNull(1)?.name ?: "Player 2"
+            val defaultBowler2 = bowlTeam2.players.getOrNull(0)?.name ?: "Bowler 1"
 
             _overrideStrikerId.value = defaultStriker2
             _overrideNonStrikerId.value = defaultNonStriker2
