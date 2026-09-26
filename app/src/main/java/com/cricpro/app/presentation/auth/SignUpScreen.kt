@@ -23,12 +23,15 @@ fun SignUpScreen(
     viewModel: AuthViewModel = hiltViewModel()
 ) {
     var step by remember { mutableStateOf(1) }
+    var localErrorMsg by remember { mutableStateOf("") }
     
     // Step 1: Personal Info
     var fullName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var confirmPasswordVisible by remember { mutableStateOf(false) }
 
     // Step 2: Cricket Profile
     var primaryRole by remember { mutableStateOf("Batter") }
@@ -39,6 +42,9 @@ fun SignUpScreen(
     var city by remember { mutableStateOf("") }
     var state by remember { mutableStateOf("") }
     var securityPin by remember { mutableStateOf("") }
+    var confirmSecurityPin by remember { mutableStateOf("") }
+    var pinVisible by remember { mutableStateOf(false) }
+    var confirmPinVisible by remember { mutableStateOf(false) }
 
     val authState by viewModel.authState.collectAsState()
 
@@ -87,31 +93,45 @@ fun SignUpScreen(
                 1 -> {
                     OutlinedTextField(
                         value = fullName,
-                        onValueChange = { fullName = it },
+                        onValueChange = { fullName = it; localErrorMsg = ""; viewModel.resetState() },
                         label = { Text("Full Name") },
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
                         value = email,
-                        onValueChange = { email = it },
+                        onValueChange = { email = it; localErrorMsg = ""; viewModel.resetState() },
                         label = { Text("Email Address") },
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
                         value = password,
-                        onValueChange = { password = it },
-                        label = { Text("Password") },
-                        visualTransformation = PasswordVisualTransformation(),
+                        onValueChange = { password = it; localErrorMsg = ""; viewModel.resetState() },
+                        label = { Text("Password (min 6 characters)") },
+                        singleLine = true,
+                        visualTransformation = if (passwordVisible) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            TextButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Text(if (passwordVisible) "Hide" else "Show", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
                         value = confirmPassword,
-                        onValueChange = { confirmPassword = it },
+                        onValueChange = { confirmPassword = it; localErrorMsg = ""; viewModel.resetState() },
                         label = { Text("Confirm Password") },
-                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        visualTransformation = if (confirmPasswordVisible) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            TextButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
+                                Text(if (confirmPasswordVisible) "Hide" else "Show", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -175,23 +195,45 @@ fun SignUpScreen(
                 3 -> {
                     OutlinedTextField(
                         value = city,
-                        onValueChange = { city = it },
+                        onValueChange = { city = it; localErrorMsg = "" },
                         label = { Text("City") },
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
                         value = state,
-                        onValueChange = { state = it },
+                        onValueChange = { state = it; localErrorMsg = "" },
                         label = { Text("State / Region") },
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     OutlinedTextField(
                         value = securityPin,
-                        onValueChange = { if (it.length <= 4) securityPin = it },
+                        onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) { securityPin = it; localErrorMsg = "" } },
                         label = { Text("4-Digit Security PIN (For Instant Sign-In)") },
-                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        visualTransformation = if (pinVisible) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            TextButton(onClick = { pinVisible = !pinVisible }) {
+                                Text(if (pinVisible) "Hide" else "Show", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = confirmSecurityPin,
+                        onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) { confirmSecurityPin = it; localErrorMsg = "" } },
+                        label = { Text("Confirm 4-Digit Security PIN") },
+                        singleLine = true,
+                        visualTransformation = if (confirmPinVisible) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            TextButton(onClick = { confirmPinVisible = !confirmPinVisible }) {
+                                Text(if (confirmPinVisible) "Hide" else "Show", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -205,7 +247,7 @@ fun SignUpScreen(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (step > 1) {
                         OutlinedButton(
-                            onClick = { step-- },
+                            onClick = { step--; localErrorMsg = ""; viewModel.resetState() },
                             modifier = Modifier.weight(1f).height(50.dp),
                             shape = RoundedCornerShape(12.dp)
                         ) {
@@ -215,20 +257,54 @@ fun SignUpScreen(
 
                     Button(
                         onClick = {
-                            if (step < 3) {
-                                step++
+                            localErrorMsg = ""
+                            if (step == 1) {
+                                val trimmedName = fullName.trim()
+                                val trimmedEmail = email.trim()
+                                if (trimmedName.isBlank()) {
+                                    localErrorMsg = "Please enter your Full Name"
+                                    return@Button
+                                }
+                                if (trimmedEmail.isBlank() || !trimmedEmail.contains("@") || !trimmedEmail.contains(".")) {
+                                    localErrorMsg = "Please enter a valid email address (e.g. name@domain.com)"
+                                    return@Button
+                                }
+                                if (password.length < 6) {
+                                    localErrorMsg = "Password must be at least 6 characters"
+                                    return@Button
+                                }
+                                if (password != confirmPassword) {
+                                    localErrorMsg = "Passwords do not match"
+                                    return@Button
+                                }
+                                step = 2
+                            } else if (step == 2) {
+                                step = 3
                             } else {
-                                val user = User(
-                                    fullName = if (fullName.isBlank()) "CricPro Player" else fullName,
-                                    email = if (email.isBlank()) "player@cricpro.local" else email,
-                                    primaryRole = primaryRole,
-                                    battingStyle = battingStyle,
-                                    bowlingStyle = bowlingStyle,
-                                    city = city,
-                                    state = state,
-                                    securityPin = securityPin
+                                val trimmedPin = securityPin.trim()
+                                val trimmedConfirmPin = confirmSecurityPin.trim()
+                                if (trimmedPin.isNotBlank()) {
+                                    if (trimmedPin.length != 4 || !trimmedPin.all { it.isDigit() }) {
+                                        localErrorMsg = "Security PIN must be exactly 4 numeric digits"
+                                        return@Button
+                                    }
+                                    if (trimmedPin != trimmedConfirmPin) {
+                                        localErrorMsg = "Security PINs do not match"
+                                        return@Button
+                                    }
+                                    if (trimmedPin == password.trim()) {
+                                        localErrorMsg = "Security PIN should not be identical to your password"
+                                        return@Button
+                                    }
+                                }
+                                viewModel.signUp(
+                                    name = fullName,
+                                    email = email,
+                                    pass = password,
+                                    confirmPass = confirmPassword,
+                                    pin = securityPin,
+                                    confirmPin = confirmSecurityPin
                                 )
-                                viewModel.saveOnboardingProfile(user)
                             }
                         },
                         modifier = Modifier.weight(1f).height(50.dp),
@@ -245,9 +321,12 @@ fun SignUpScreen(
                 }
             }
 
-            if (authState is AuthState.Error) {
+            if (localErrorMsg.isNotBlank()) {
                 Spacer(modifier = Modifier.height(12.dp))
-                Text((authState as AuthState.Error).message, color = MaterialTheme.colorScheme.error)
+                Text(localErrorMsg, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
+            } else if (authState is AuthState.Error) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text((authState as AuthState.Error).message, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
             }
 
             Spacer(modifier = Modifier.height(20.dp))

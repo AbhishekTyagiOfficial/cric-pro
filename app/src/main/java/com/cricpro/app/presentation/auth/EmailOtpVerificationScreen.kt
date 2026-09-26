@@ -20,14 +20,21 @@ fun EmailOtpVerificationScreen(
     viewModel: AuthViewModel = hiltViewModel()
 ) {
     var otpCode by remember { mutableStateOf("") }
+    var cooldownSeconds by remember { mutableStateOf(60) }
     val authState by viewModel.authState.collectAsState()
 
     val email = viewModel.activeOtpEmail
-    val activeOtp = viewModel.activeOtpCode
 
     LaunchedEffect(authState) {
         if (authState is AuthState.Success) {
             onVerificationSuccess()
+        }
+    }
+
+    LaunchedEffect(cooldownSeconds) {
+        if (cooldownSeconds > 0) {
+            kotlinx.coroutines.delay(1000L)
+            cooldownSeconds--
         }
     }
 
@@ -49,14 +56,13 @@ fun EmailOtpVerificationScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "We have generated a 6-digit OTP code for:\n${email.ifBlank { "your email" }}",
+                text = "We have sent a 6-digit OTP code to:\n${email.ifBlank { "your email" }}",
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Highlight Banner displaying sent OTP Notification Code
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -66,16 +72,15 @@ fun EmailOtpVerificationScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "📩 Free OTP Sent Successfully!",
+                        text = "📩 6-Digit OTP Sent Successfully!",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF2E7D32)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Your OTP Code: ${activeOtp.ifBlank { "123456" }}",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold,
+                        text = "Please check your email inbox and enter the OTP below.",
+                        fontSize = 12.sp,
                         color = Color(0xFF1B5E20)
                     )
                 }
@@ -85,28 +90,20 @@ fun EmailOtpVerificationScreen(
 
             OutlinedTextField(
                 value = otpCode,
-                onValueChange = { if (it.length <= 6) otpCode = it },
-                label = { Text("Enter 6-Digit OTP Code") },
+                onValueChange = { if (it.length <= 6 && it.all { c -> c.isDigit() }) otpCode = it; if (authState is AuthState.Error) viewModel.resetState() },
+                label = { Text("Enter 6-Digit Numeric OTP") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            TextButton(
-                onClick = { otpCode = activeOtp.ifBlank { "123456" } },
-                modifier = Modifier.align(Alignment.End)
-            ) {
-                Text("Auto-Fill Sent OTP Code", fontWeight = FontWeight.Bold)
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             if (authState is AuthState.Loading) {
                 CircularProgressIndicator()
             } else {
                 Button(
                     onClick = { viewModel.verifyEmailOtp(otpCode) },
+                    enabled = otpCode.length == 6,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp),
@@ -115,15 +112,24 @@ fun EmailOtpVerificationScreen(
                     Text("Verify & Sign In", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = { viewModel.sendEmailOtp(email) }) {
-                        Text("Resend OTP Code")
+                    TextButton(
+                        enabled = cooldownSeconds == 0,
+                        onClick = {
+                            cooldownSeconds = 60
+                            viewModel.sendEmailOtp(email)
+                        }
+                    ) {
+                        Text(
+                            text = if (cooldownSeconds > 0) "Resend OTP (${cooldownSeconds}s)" else "Resend OTP Code",
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
 
                     TextButton(onClick = onNavigateBack) {

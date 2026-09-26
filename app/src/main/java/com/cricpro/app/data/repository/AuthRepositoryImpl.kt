@@ -34,8 +34,8 @@ class AuthRepositoryImpl @Inject constructor(
         awaitClose { firebaseAuth.removeAuthStateListener(listener) }
     }
 
-    override suspend fun signUp(fullName: String, email: String, password: String): Result<User> {
-        return authService.signUp(fullName, email, password)
+    override suspend fun signUp(fullName: String, email: String, password: String, securityPin: String): Result<User> {
+        return authService.signUp(fullName, email, password, securityPin)
     }
 
     override suspend fun login(email: String, password: String): Result<User> {

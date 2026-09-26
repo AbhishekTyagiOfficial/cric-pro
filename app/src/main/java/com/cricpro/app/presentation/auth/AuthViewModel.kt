@@ -116,12 +116,8 @@ class AuthViewModel @Inject constructor(
             _authState.value = AuthState.Error("Invalid email session. Please request a new OTP.")
             return
         }
-        if (trimmedOtp.length < 6) {
-            _authState.value = AuthState.Error("Please enter the 6-digit OTP code")
-            return
-        }
-        if (trimmedOtp != activeOtpCode && trimmedOtp != "123456") {
-            _authState.value = AuthState.Error("Invalid OTP code. Please enter the 6-digit OTP code sent.")
+        if (trimmedOtp.length < 6 || !trimmedOtp.all { it.isDigit() }) {
+            _authState.value = AuthState.Error("Please enter the 6-digit numeric OTP code")
             return
         }
 
@@ -142,8 +138,8 @@ class AuthViewModel @Inject constructor(
             _authState.value = AuthState.Error("Please enter a valid email address (e.g. name@domain.com)")
             return
         }
-        if (trimmedPin.length < 4) {
-            _authState.value = AuthState.Error("Please enter your 4-digit Security PIN")
+        if (trimmedPin.length < 4 || !trimmedPin.all { it.isDigit() }) {
+            _authState.value = AuthState.Error("Please enter your 4-digit numeric Security PIN")
             return
         }
         viewModelScope.launch {
@@ -172,9 +168,19 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun signUp(name: String, email: String, pass: String, confirmPass: String) {
+    fun signUp(
+        name: String,
+        email: String,
+        pass: String,
+        confirmPass: String,
+        pin: String = "",
+        confirmPin: String = ""
+    ) {
         val trimmedName = name.trim()
         val trimmedEmail = email.trim()
+        val trimmedPin = pin.trim()
+        val trimmedConfirmPin = confirmPin.trim()
+
         if (trimmedName.isBlank()) {
             _authState.value = AuthState.Error("Please enter your Full Name")
             return
@@ -187,18 +193,32 @@ class AuthViewModel @Inject constructor(
             _authState.value = AuthState.Error("Please enter a password")
             return
         }
-        if (pass != confirmPass) {
-            _authState.value = AuthState.Error("Passwords do not match")
-            return
-        }
         if (pass.length < 6) {
             _authState.value = AuthState.Error("Password must be at least 6 characters")
             return
         }
+        if (pass != confirmPass) {
+            _authState.value = AuthState.Error("Passwords do not match")
+            return
+        }
+        if (trimmedPin.isNotBlank()) {
+            if (trimmedPin.length != 4 || !trimmedPin.all { it.isDigit() }) {
+                _authState.value = AuthState.Error("Security PIN must be exactly 4 numeric digits")
+                return
+            }
+            if (trimmedConfirmPin.isNotBlank() && trimmedPin != trimmedConfirmPin) {
+                _authState.value = AuthState.Error("Security PINs do not match")
+                return
+            }
+            if (trimmedPin == pass) {
+                _authState.value = AuthState.Error("Security PIN should not be identical to your password")
+                return
+            }
+        }
 
         viewModelScope.launch {
             _authState.value = AuthState.Loading
-            val result = authRepository.signUp(trimmedName, trimmedEmail, pass)
+            val result = authRepository.signUp(trimmedName, trimmedEmail, pass, trimmedPin)
             result.fold(
                 onSuccess = { user -> _authState.value = AuthState.Success(user) },
                 onFailure = { err -> _authState.value = AuthState.Error(err.localizedMessage ?: "Sign up failed") }

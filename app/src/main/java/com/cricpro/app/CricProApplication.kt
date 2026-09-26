@@ -15,7 +15,11 @@ class CricProApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
-        MobileAds.initialize(this) {}
+        try {
+            MobileAds.initialize(this) {}
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     override val workManagerConfiguration: Configuration

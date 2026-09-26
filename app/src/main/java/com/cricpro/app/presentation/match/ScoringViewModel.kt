@@ -3,6 +3,7 @@ package com.cricpro.app.presentation.match
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.cricpro.app.data.local.preferences.SettingsManager
 import com.cricpro.app.domain.model.*
 import com.cricpro.app.domain.repository.MatchRepository
 import com.cricpro.app.domain.repository.ScoringRepository
@@ -34,6 +35,7 @@ class ScoringViewModel @Inject constructor(
     private val scoreBallUseCase: ScoreBallUseCase,
     private val undoBallUseCase: UndoBallUseCase,
     private val editBallUseCase: EditBallUseCase,
+    private val settingsManager: SettingsManager,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -409,7 +411,8 @@ class ScoringViewModel @Inject constructor(
 
         val isLegal = extraType != ExtraType.WIDE && extraType != ExtraType.NO_BALL
         val extraRunsVal = when (extraType) {
-            ExtraType.WIDE, ExtraType.NO_BALL -> 1
+            ExtraType.WIDE -> 1
+            ExtraType.NO_BALL -> if (settingsManager.isNoBallExtraRunEnabledSync()) 1 else 0
             else -> 0
         }
 

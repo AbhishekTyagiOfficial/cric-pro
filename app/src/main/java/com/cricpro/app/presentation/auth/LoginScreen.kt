@@ -28,6 +28,9 @@ fun LoginScreen(
     var password by remember { mutableStateOf("") }
     var securityPin by remember { mutableStateOf("") }
 
+    var passwordVisible by remember { mutableStateOf(false) }
+    var pinVisible by remember { mutableStateOf(false) }
+
     val authState by viewModel.authState.collectAsState()
 
     LaunchedEffect(authState) {
@@ -90,9 +93,15 @@ fun LoginScreen(
                 0 -> {
                     OutlinedTextField(
                         value = password,
-                        onValueChange = { password = it },
+                        onValueChange = { password = it; if (authState is AuthState.Error) viewModel.resetState() },
                         label = { Text("Password") },
-                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        visualTransformation = if (passwordVisible) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            TextButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Text(if (passwordVisible) "Hide" else "Show", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -113,9 +122,15 @@ fun LoginScreen(
                 2 -> {
                     OutlinedTextField(
                         value = securityPin,
-                        onValueChange = { if (it.length <= 4) securityPin = it },
+                        onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) securityPin = it; if (authState is AuthState.Error) viewModel.resetState() },
                         label = { Text("4-Digit Security PIN") },
-                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        visualTransformation = if (pinVisible) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            TextButton(onClick = { pinVisible = !pinVisible }) {
+                                Text(if (pinVisible) "Hide" else "Show", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

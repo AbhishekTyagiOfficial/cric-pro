@@ -138,7 +138,7 @@ class ScoringEngine {
                 legalBalls = if (isLegal) currentBowler.legalBalls + 1 else currentBowler.legalBalls,
                 runsConceded = currentBowler.runsConceded + bowlerRunsThisBall,
                 wides = if (extraType == ExtraType.WIDE) currentBowler.wides + extraRuns else currentBowler.wides,
-                noBalls = if (extraType == ExtraType.NO_BALL) currentBowler.noBalls + extraRuns else currentBowler.noBalls
+                noBalls = if (extraType == ExtraType.NO_BALL) currentBowler.noBalls + 1 else currentBowler.noBalls
             )
             bowlersMap[bowlerKey] = updatedBowler
 
@@ -162,8 +162,10 @@ class ScoringEngine {
 
                 // Bowler gets credit for wicket if not run out / retired out
                 if (ball.wicketType != WicketType.RUN_OUT && ball.wicketType != WicketType.RETIRED_OUT) {
-                    val wBowler = bowlersMap[bowlerKey]!!
-                    bowlersMap[bowlerKey] = wBowler.copy(wickets = wBowler.wickets + 1)
+                    val wBowler = bowlersMap[bowlerKey]
+                    if (wBowler != null) {
+                        bowlersMap[bowlerKey] = wBowler.copy(wickets = wBowler.wickets + 1)
+                    }
                 }
 
                 // Record Fall of Wicket
@@ -220,8 +222,13 @@ class ScoringEngine {
                 isOverEnd = true
                 // Maiden check
                 if (currentOverBowlerRuns == 0 && currentOverBowlerId != null) {
-                    val mBowler = bowlersMap[currentOverBowlerId]!!
-                    bowlersMap[currentOverBowlerId] = mBowler.copy(maidens = mBowler.maidens + 1)
+                    val mBowlerKey = bowlersMap.keys.find { it == currentOverBowlerId }
+                        ?: bowlersMap.entries.find { it.value.name == currentOverBowlerId || it.value.playerId == currentOverBowlerId }?.key
+                        ?: currentOverBowlerId
+                    val mBowler = bowlersMap[mBowlerKey]
+                    if (mBowler != null) {
+                        bowlersMap[mBowlerKey] = mBowler.copy(maidens = mBowler.maidens + 1)
+                    }
                 }
 
                 // Swap strike at end of over

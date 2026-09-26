@@ -6,11 +6,14 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,7 +38,13 @@ fun NotificationsScreen(onNavigateBack: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onNavigateBack: () -> Unit, onLogout: () -> Unit) {
+fun SettingsScreen(
+    onNavigateBack: () -> Unit,
+    onLogout: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel()
+) {
+    val isNoBallExtraRunEnabled by viewModel.isNoBallExtraRunEnabled.collectAsState()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -47,6 +56,18 @@ fun SettingsScreen(onNavigateBack: () -> Unit, onLogout: () -> Unit) {
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
             Text("General Settings", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
+
+            ListItem(
+                headlineContent = { Text("No-Ball Extra Run", fontWeight = FontWeight.SemiBold) },
+                supportingContent = { Text("Automatically add 1 extra run for every No-Ball") },
+                trailingContent = {
+                    Switch(
+                        checked = isNoBallExtraRunEnabled,
+                        onCheckedChange = { viewModel.setNoBallExtraRunEnabled(it) }
+                    )
+                }
+            )
+            Divider()
 
             ListItem(headlineContent = { Text("Offline Sync Manager") }, supportingContent = { Text("WorkManager background sync status: Active") })
             Divider()

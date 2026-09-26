@@ -31,7 +31,13 @@ fun ForgotPasswordScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it; if (authState is AuthState.Error) viewModel.resetState() },
+                label = { Text("Email Address (e.g. player@domain.com)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -43,13 +49,19 @@ fun ForgotPasswordScreen(
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Send Reset Link", fontSize = 16.sp)
+                    Text("Send Reset Link", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
             if (authState is AuthState.Error) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Text((authState as AuthState.Error).message, color = MaterialTheme.colorScheme.primary)
+                val msg = (authState as AuthState.Error).message
+                val isSuccessMsg = msg.contains("sent", ignoreCase = true)
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = msg,
+                    color = if (isSuccessMsg) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
