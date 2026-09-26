@@ -45,6 +45,7 @@ fun SettingsScreen(
 ) {
     val isNoBallExtraRunEnabled by viewModel.isNoBallExtraRunEnabled.collectAsState()
     val isWideExtraRunEnabled by viewModel.isWideExtraRunEnabled.collectAsState()
+    val isWideBallRunFeatureEnabled by viewModel.isWideBallRunFeatureEnabled.collectAsState()
 
     Scaffold(
         topBar = {
@@ -70,17 +71,19 @@ fun SettingsScreen(
             )
             Divider()
 
-            ListItem(
-                headlineContent = { Text("Wide Extra Run", fontWeight = FontWeight.SemiBold) },
-                supportingContent = { Text("Automatically add 1 run as Extra for every Wide") },
-                trailingContent = {
-                    Switch(
-                        checked = isWideExtraRunEnabled,
-                        onCheckedChange = { viewModel.setWideExtraRunEnabled(it) }
-                    )
-                }
-            )
-            Divider()
+            if (isWideBallRunFeatureEnabled) {
+                ListItem(
+                    headlineContent = { Text("Wide Extra Run", fontWeight = FontWeight.SemiBold) },
+                    supportingContent = { Text("Automatically add 1 run as Extra for every Wide") },
+                    trailingContent = {
+                        Switch(
+                            checked = isWideExtraRunEnabled,
+                            onCheckedChange = { viewModel.setWideExtraRunEnabled(it) }
+                        )
+                    }
+                )
+                Divider()
+            }
 
             ListItem(headlineContent = { Text("Offline Sync Manager") }, supportingContent = { Text("WorkManager background sync status: Active") })
             Divider()

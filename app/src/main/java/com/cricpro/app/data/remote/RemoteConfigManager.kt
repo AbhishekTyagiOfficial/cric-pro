@@ -17,10 +17,14 @@ class RemoteConfigManager @Inject constructor(
 ) {
     companion object {
         const val KEY_TOURNAMENT_TAB_ENABLE = "Tournament_tab_enable"
+        const val KEY_WIDE_BALL_RUN_ENABLE = "wide_ball_run_enable"
     }
 
     private val _isTournamentTabEnabled = MutableStateFlow(true)
     val isTournamentTabEnabled: StateFlow<Boolean> = _isTournamentTabEnabled.asStateFlow()
+
+    private val _isWideBallRunFeatureEnabled = MutableStateFlow(true)
+    val isWideBallRunFeatureEnabled: StateFlow<Boolean> = _isWideBallRunFeatureEnabled.asStateFlow()
 
     init {
         initRemoteConfig()
@@ -32,10 +36,14 @@ class RemoteConfigManager @Inject constructor(
                 .setMinimumFetchIntervalInSeconds(0)
                 .build()
             remoteConfig.setConfigSettingsAsync(configSettings)
-            remoteConfig.setDefaultsAsync(mapOf(KEY_TOURNAMENT_TAB_ENABLE to true))
+            remoteConfig.setDefaultsAsync(mapOf(
+                KEY_TOURNAMENT_TAB_ENABLE to true,
+                KEY_WIDE_BALL_RUN_ENABLE to true
+            ))
 
             remoteConfig.fetchAndActivate().addOnCompleteListener { task ->
                 _isTournamentTabEnabled.value = remoteConfig.getBoolean(KEY_TOURNAMENT_TAB_ENABLE)
+                _isWideBallRunFeatureEnabled.value = remoteConfig.getBoolean(KEY_WIDE_BALL_RUN_ENABLE)
             }
 
             remoteConfig.addOnConfigUpdateListener(object : ConfigUpdateListener {
@@ -43,6 +51,11 @@ class RemoteConfigManager @Inject constructor(
                     if (configUpdate.updatedKeys.contains(KEY_TOURNAMENT_TAB_ENABLE)) {
                         remoteConfig.activate().addOnCompleteListener {
                             _isTournamentTabEnabled.value = remoteConfig.getBoolean(KEY_TOURNAMENT_TAB_ENABLE)
+                        }
+                    }
+                    if (configUpdate.updatedKeys.contains(KEY_WIDE_BALL_RUN_ENABLE)) {
+                        remoteConfig.activate().addOnCompleteListener {
+                            _isWideBallRunFeatureEnabled.value = remoteConfig.getBoolean(KEY_WIDE_BALL_RUN_ENABLE)
                         }
                     }
                 }
@@ -53,12 +66,21 @@ class RemoteConfigManager @Inject constructor(
             })
         } catch (e: Exception) {
             _isTournamentTabEnabled.value = true
+            _isWideBallRunFeatureEnabled.value = true
         }
     }
 
     fun getTournamentTabEnabledDirect(): Boolean {
         return try {
             remoteConfig.getBoolean(KEY_TOURNAMENT_TAB_ENABLE)
+        } catch (e: Exception) {
+            true
+        }
+    }
+
+    fun isWideBallRunFeatureEnabledDirect(): Boolean {
+        return try {
+            remoteConfig.getBoolean(KEY_WIDE_BALL_RUN_ENABLE)
         } catch (e: Exception) {
             true
         }
