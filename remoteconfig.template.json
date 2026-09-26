@@ -6,6 +6,13 @@
       },
       "description": "Controls visibility of Tournaments tab in CricPro main navigation",
       "valueType": "BOOLEAN"
+    },
+    "wide_ball_run_enable": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Controls visibility of Wide Extra Run setting toggle in Settings screen",
+      "valueType": "BOOLEAN"
     }
   }
 }
