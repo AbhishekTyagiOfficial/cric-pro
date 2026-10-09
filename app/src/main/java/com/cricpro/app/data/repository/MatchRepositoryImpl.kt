@@ -9,6 +9,7 @@ import com.cricpro.app.domain.repository.MatchRepository
 import com.cricpro.app.domain.repository.ScoringRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -61,7 +62,65 @@ class MatchRepositoryImpl @Inject constructor(
     }
 
     override fun getMatchById(matchId: String): Flow<Match?> {
-        return matchDao.getMatchById(matchId).map { it?.toDomain() }
+        return combine(
+            matchDao.getMatchById(matchId),
+            teamDao.getTeams(),
+            playerDao.searchPlayers("")
+        ) { matchEntity, teamEntities, playerEntities ->
+            if (matchEntity == null) null
+            else {
+                val baseMatch = matchEntity.toDomain()
+
+                val matchingTeamA = teamEntities.find {
+                    it.teamId == baseMatch.teamA.teamId ||
+                    (baseMatch.teamA.teamName.isNotBlank() && it.teamName.equals(baseMatch.teamA.teamName, ignoreCase = true))
+                }
+                val matchingTeamB = teamEntities.find {
+                    it.teamId == baseMatch.teamB.teamId ||
+                    (baseMatch.teamB.teamName.isNotBlank() && it.teamName.equals(baseMatch.teamB.teamName, ignoreCase = true))
+                }
+
+                val validTeamAIds = mutableSetOf<String>()
+                if (baseMatch.teamA.teamId.isNotBlank()) validTeamAIds.add(baseMatch.teamA.teamId.lowercase())
+                if (baseMatch.teamA.teamName.isNotBlank()) validTeamAIds.add(baseMatch.teamA.teamName.lowercase())
+                if (matchingTeamA != null) {
+                    if (matchingTeamA.teamId.isNotBlank()) validTeamAIds.add(matchingTeamA.teamId.lowercase())
+                    if (matchingTeamA.teamName.isNotBlank()) validTeamAIds.add(matchingTeamA.teamName.lowercase())
+                }
+                validTeamAIds.add("t1")
+                validTeamAIds.add("1")
+
+                val validTeamBIds = mutableSetOf<String>()
+                if (baseMatch.teamB.teamId.isNotBlank()) validTeamBIds.add(baseMatch.teamB.teamId.lowercase())
+                if (baseMatch.teamB.teamName.isNotBlank()) validTeamBIds.add(baseMatch.teamB.teamName.lowercase())
+                if (matchingTeamB != null) {
+                    if (matchingTeamB.teamId.isNotBlank()) validTeamBIds.add(matchingTeamB.teamId.lowercase())
+                    if (matchingTeamB.teamName.isNotBlank()) validTeamBIds.add(matchingTeamB.teamName.lowercase())
+                }
+                validTeamBIds.add("t2")
+                validTeamBIds.add("2")
+
+                val teamAPlayers = playerEntities.filter { p ->
+                    val pTeamId = p.teamId.lowercase()
+                    validTeamAIds.contains(pTeamId) ||
+                    (baseMatch.teamA.teamName.isNotBlank() && p.teamId.equals(baseMatch.teamA.teamName, ignoreCase = true))
+                }.map { it.toDomain() }
+
+                val teamBPlayers = playerEntities.filter { p ->
+                    val pTeamId = p.teamId.lowercase()
+                    validTeamBIds.contains(pTeamId) ||
+                    (baseMatch.teamB.teamName.isNotBlank() && p.teamId.equals(baseMatch.teamB.teamName, ignoreCase = true))
+                }.map { it.toDomain() }
+
+                val finalPlayersA = if (teamAPlayers.isNotEmpty()) teamAPlayers else baseMatch.teamA.players
+                val finalPlayersB = if (teamBPlayers.isNotEmpty()) teamBPlayers else baseMatch.teamB.players
+
+                val finalTeamA = baseMatch.teamA.copy(players = finalPlayersA)
+                val finalTeamB = baseMatch.teamB.copy(players = finalPlayersB)
+
+                baseMatch.copy(teamA = finalTeamA, teamB = finalTeamB)
+            }
+        }
     }
 
     override suspend fun createMatch(match: Match): Result<String> {

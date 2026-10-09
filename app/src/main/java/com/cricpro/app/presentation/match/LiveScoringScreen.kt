@@ -834,7 +834,7 @@ fun PlayerSelectionDialog(
                 val availablePlayers = if (teamPlayers.isNotEmpty()) {
                     teamPlayers.map { it.name }
                 } else {
-                    List(11) { if (teamName.isNotBlank()) "$teamName Player ${it + 1}" else "Player ${it + 1}" }
+                    List(11) { "Player ${it + 1}" }
                 }
                 LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
                     items(availablePlayers) { player ->

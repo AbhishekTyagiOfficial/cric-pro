@@ -35,14 +35,14 @@ class TeamRepositoryImpl @Inject constructor(
     }
 
     override fun getTeams(): Flow<List<Team>> {
-        val currentUid = authService.currentUserId ?: "guest"
         return teamDao.getTeams().combine(playerDao.searchPlayers("")) { teamEntities, playerEntities ->
-            teamEntities
-                .filter { isTeamOwnedByUser(it.ownerId, currentUid) }
-                .map { teamEntity ->
-                    val teamPlayers = playerEntities.filter { it.teamId == teamEntity.teamId }.map { it.toDomain() }
-                    teamEntity.toDomain(teamPlayers)
-                }
+            teamEntities.map { teamEntity ->
+                val teamPlayers = playerEntities.filter { 
+                    it.teamId == teamEntity.teamId || 
+                    (teamEntity.teamName.isNotBlank() && it.teamId.equals(teamEntity.teamName, ignoreCase = true))
+                }.map { it.toDomain() }
+                teamEntity.toDomain(teamPlayers)
+            }
         }
     }
 
@@ -209,20 +209,6 @@ class TeamRepositoryImpl @Inject constructor(
             },
             createdAt = createdAt,
             updatedAt = updatedAt
-        )
-    }
-
-    private fun PlayerEntity.toDomain(): Player {
-        return Player(
-            playerId = playerId,
-            teamId = teamId,
-            name = name,
-            profilePhoto = profilePhoto,
-            role = try { PlayerRole.valueOf(role) } catch (e: Exception) { PlayerRole.ALL_ROUNDER },
-            battingStyle = try { BattingStyle.valueOf(battingStyle) } catch (e: Exception) { BattingStyle.RIGHT_HAND },
-            bowlingStyle = try { BowlingStyle.valueOf(bowlingStyle) } catch (e: Exception) { BowlingStyle.RIGHT_ARM_MEDIUM },
-            isCaptain = isCaptain,
-            isViceCaptain = isViceCaptain
         )
     }
 }

@@ -75,6 +75,20 @@ fun Player.toPlayerEntity(): PlayerEntity {
     )
 }
 
+fun PlayerEntity.toDomain(): Player {
+    return Player(
+        playerId = playerId,
+        teamId = teamId,
+        name = name,
+        profilePhoto = profilePhoto,
+        role = try { PlayerRole.valueOf(role) } catch (e: Exception) { PlayerRole.ALL_ROUNDER },
+        battingStyle = try { BattingStyle.valueOf(battingStyle) } catch (e: Exception) { BattingStyle.RIGHT_HAND },
+        bowlingStyle = try { BowlingStyle.valueOf(bowlingStyle) } catch (e: Exception) { BowlingStyle.RIGHT_ARM_MEDIUM },
+        isCaptain = isCaptain,
+        isViceCaptain = isViceCaptain
+    )
+}
+
 @Entity(tableName = "matches")
 data class MatchEntity(
     @PrimaryKey val matchId: String,

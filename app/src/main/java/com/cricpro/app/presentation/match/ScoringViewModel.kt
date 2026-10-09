@@ -295,14 +295,14 @@ class ScoringViewModel @Inject constructor(
                     }
 
                     val rawStriker = _overrideStrikerId.value
-                        ?: if (isBatterNotOut(engineStriker)) engineStriker else null
                         ?: if (isBatterNotOut(match.currentStrikerId)) match.currentStrikerId else null
-                        ?: engineStriker ?: match.currentStrikerId
+                        ?: if (isBatterNotOut(engineStriker)) engineStriker else null
+                        ?: match.currentStrikerId ?: engineStriker
 
                     val rawNonStriker = _overrideNonStrikerId.value
-                        ?: if (isBatterNotOut(engineNonStriker)) engineNonStriker else null
                         ?: if (isBatterNotOut(match.currentNonStrikerId)) match.currentNonStrikerId else null
-                        ?: engineNonStriker ?: match.currentNonStrikerId
+                        ?: if (isBatterNotOut(engineNonStriker)) engineNonStriker else null
+                        ?: match.currentNonStrikerId ?: engineNonStriker
 
                     val activeBowlerFromStream = _overrideBowlerId.value ?: match.currentBowlerId
 
