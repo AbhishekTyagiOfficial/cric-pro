@@ -15,6 +15,7 @@ interface MatchRepository {
     suspend fun updatePlayingXI(matchId: String, playingXIA: List<String>, playingXIB: List<String>): Result<Unit>
     suspend fun updateMatchStatus(matchId: String, status: String): Result<Unit>
     suspend fun searchMatches(query: String): Flow<List<Match>>
+    suspend fun deleteMatch(matchId: String): Result<Unit>
 }
 
 interface ScoringRepository {

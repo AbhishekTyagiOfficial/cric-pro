@@ -30,6 +30,15 @@ class FirestoreService @Inject constructor(
         }
     }
 
+    suspend fun deleteMatch(matchId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            firestore.collection("matches").document(matchId).delete().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun saveMatch(match: Match): Result<Unit> {
         return try {
             val prunedMatch = match.copy(

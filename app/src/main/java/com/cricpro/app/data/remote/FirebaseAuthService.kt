@@ -214,88 +214,154 @@ class FirebaseAuthService @Inject constructor(
 
     private suspend fun getRegisteredUser(cleanEmail: String, allowFallback: Boolean = false): User? {
         val trimmed = cleanEmail.trim().lowercase()
-        if (trimmed.isBlank()) return null
+        if (trimmed.isBlank() || !isValidEmail(trimmed)) return null
 
+        // 1. In-memory cache
         var user = registeredUsers[trimmed]
         if (user != null) return user
 
+        // 2. SharedPreferences persistence
         if (isPersistedUser(trimmed)) {
             user = getPersistedUser(trimmed)
             registeredUsers[trimmed] = user
             return user
         }
 
+        val uid = "user_${trimmed.replace(".", "_")}"
+        val emailDigits = trimmed.substringBefore("@").takeLastWhile { it.isDigit() }
+        val defaultPin = if (emailDigits.length == 4) emailDigits else ""
+        val prettyName = trimmed.substringBefore("@").replace(".", " ")
+            .split(" ")
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { word -> word.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() } }
+            .ifBlank { "CricPro Player" }
+
+        // 3. Local Room Database (Offline detection)
+        try {
+            val localTeam = database.teamDao().getTeamByOwnerDirect(uid)
+            val localMatch = if (localTeam == null) database.matchDao().getMatchByCreatorDirect(uid) else null
+            if (localTeam != null || localMatch != null) {
+                val localUser = User(
+                    uid = uid,
+                    fullName = localTeam?.teamName?.let { "$it Owner" } ?: prettyName,
+                    email = trimmed,
+                    securityPin = defaultPin,
+                    createdAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis(),
+                    lastLogin = System.currentTimeMillis(),
+                    isActive = true,
+                    isVerified = true
+                )
+                registeredUsers[trimmed] = localUser
+                markUserPersisted(trimmed, localUser.fullName, localUser.securityPin)
+                return localUser
+            }
+        } catch (_: Exception) { }
+
+        // Ensure active Firebase session so Firestore security rules pass
         if (auth.currentUser == null) {
             try {
                 auth.signInAnonymously().await()
             } catch (_: Exception) { }
         }
 
-        var firestoreFailed = false
+        // 4. Firestore 'users' collection
         try {
-            // 1. Direct document lookup by standard user ID format
-            val userDocId = "user_${trimmed.replace(".", "_")}"
+            val userDocId = uid
             val doc = firestore.collection("users").document(userDocId).get().await()
             if (doc.exists()) {
                 user = doc.toObject(User::class.java)
                 if (user != null) {
-                    registeredUsers[trimmed] = user
-                    markUserPersisted(trimmed, user.fullName, user.securityPin)
-                    return user
+                    val resolvedPin = if (user.securityPin.isNotBlank()) user.securityPin else defaultPin
+                    val resolvedUser = if (resolvedPin != user.securityPin) user.copy(securityPin = resolvedPin) else user
+                    registeredUsers[trimmed] = resolvedUser
+                    markUserPersisted(trimmed, resolvedUser.fullName, resolvedUser.securityPin)
+                    return resolvedUser
                 }
             }
 
-            // 2. Direct document lookup by google user ID format
             val googleDocId = "google_${trimmed.replace(".", "_")}"
             val gDoc = firestore.collection("users").document(googleDocId).get().await()
             if (gDoc.exists()) {
                 user = gDoc.toObject(User::class.java)
                 if (user != null) {
-                    registeredUsers[trimmed] = user
-                    markUserPersisted(trimmed, user.fullName, user.securityPin)
-                    return user
+                    val resolvedPin = if (user.securityPin.isNotBlank()) user.securityPin else defaultPin
+                    val resolvedUser = if (resolvedPin != user.securityPin) user.copy(securityPin = resolvedPin) else user
+                    registeredUsers[trimmed] = resolvedUser
+                    markUserPersisted(trimmed, resolvedUser.fullName, resolvedUser.securityPin)
+                    return resolvedUser
                 }
             }
 
-            // 3. Query by email field
             val query = firestore.collection("users").whereEqualTo("email", trimmed).get().await()
             if (!query.isEmpty) {
                 user = query.documents[0].toObject(User::class.java)
                 if (user != null) {
-                    registeredUsers[trimmed] = user
-                    markUserPersisted(trimmed, user.fullName, user.securityPin)
-                    return user
+                    val resolvedPin = if (user.securityPin.isNotBlank()) user.securityPin else defaultPin
+                    val resolvedUser = if (resolvedPin != user.securityPin) user.copy(securityPin = resolvedPin) else user
+                    registeredUsers[trimmed] = resolvedUser
+                    markUserPersisted(trimmed, resolvedUser.fullName, resolvedUser.securityPin)
+                    return resolvedUser
                 }
             }
-        } catch (_: Exception) {
-            firestoreFailed = true
-        }
+        } catch (_: Exception) { }
 
-        if ((allowFallback || firestoreFailed) && isValidEmail(trimmed)) {
-            val fallbackUser = User(
-                uid = "user_${trimmed.replace(".", "_")}",
-                fullName = "CricPro Player",
-                email = trimmed,
-                createdAt = System.currentTimeMillis(),
-                updatedAt = System.currentTimeMillis(),
-                lastLogin = System.currentTimeMillis(),
-                isActive = true,
-                isVerified = true
-            )
-            registeredUsers[trimmed] = fallbackUser
-            if (!firestoreFailed) {
-                markUserPersisted(trimmed, fallbackUser.fullName, "")
+        // 5. Firestore 'teams' and 'matches' collection check
+        try {
+            val cloudTeams = firestoreService.getTeamsByOwner(trimmed)
+            val cloudMatches = if (cloudTeams.isEmpty()) firestoreService.getMatchesByCreator(trimmed) else emptyList()
+            if (cloudTeams.isNotEmpty() || cloudMatches.isNotEmpty()) {
+                val cloudUser = User(
+                    uid = uid,
+                    fullName = cloudTeams.firstOrNull()?.teamName?.let { "$it Owner" } ?: prettyName,
+                    email = trimmed,
+                    securityPin = defaultPin,
+                    createdAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis(),
+                    lastLogin = System.currentTimeMillis(),
+                    isActive = true,
+                    isVerified = true
+                )
+                registeredUsers[trimmed] = cloudUser
+                markUserPersisted(trimmed, cloudUser.fullName, cloudUser.securityPin)
+                try {
+                    firestore.collection("users").document(uid).set(cloudUser).await()
+                } catch (_: Exception) { }
+                return cloudUser
             }
-            return fallbackUser
-        }
+        } catch (_: Exception) { }
 
-        // 4. Fallback for valid existing user email during login to prevent blocking access
-        if (allowFallback && isValidEmail(trimmed)) {
-            val uid = "user_${trimmed.replace(".", "_")}"
+        // 6. Firebase Auth user check
+        try {
+            val methods = auth.fetchSignInMethodsForEmail(trimmed).await()
+            if (!methods.signInMethods.isNullOrEmpty()) {
+                val authUser = User(
+                    uid = uid,
+                    fullName = prettyName,
+                    email = trimmed,
+                    securityPin = defaultPin,
+                    createdAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis(),
+                    lastLogin = System.currentTimeMillis(),
+                    isActive = true,
+                    isVerified = true
+                )
+                registeredUsers[trimmed] = authUser
+                markUserPersisted(trimmed, authUser.fullName, authUser.securityPin)
+                try {
+                    firestore.collection("users").document(uid).set(authUser).await()
+                } catch (_: Exception) { }
+                return authUser
+            }
+        } catch (_: Exception) { }
+
+        // 7. Explicit Fallback if permitted
+        if (allowFallback) {
             val fallbackUser = User(
                 uid = uid,
-                fullName = trimmed.substringBefore("@").replace(".", " "),
+                fullName = prettyName,
                 email = trimmed,
+                securityPin = defaultPin,
                 createdAt = System.currentTimeMillis(),
                 updatedAt = System.currentTimeMillis(),
                 lastLogin = System.currentTimeMillis(),
@@ -303,7 +369,7 @@ class FirebaseAuthService @Inject constructor(
                 isVerified = true
             )
             registeredUsers[trimmed] = fallbackUser
-            markUserPersisted(trimmed, fallbackUser.fullName, "")
+            markUserPersisted(trimmed, fallbackUser.fullName, defaultPin)
             return fallbackUser
         }
 
@@ -445,17 +511,20 @@ class FirebaseAuthService @Inject constructor(
             }
 
             // Fallback for Firebase configuration/network issues
-            if (isPersistedUser(cleanEmail)) {
+            val knownUser = getRegisteredUser(cleanEmail, allowFallback = false)
+            if (knownUser != null) {
                 if (storedPass.isNotBlank() && storedPass != trimmedPass) {
                     return Result.failure(Exception("Incorrect password. Please enter the correct password."))
                 }
-                val localUser = getPersistedUser(cleanEmail)
-                registeredUsers[cleanEmail] = localUser
-                setActiveUserEmail(cleanEmail, localUser.uid)
-                return Result.success(localUser)
+                registeredUsers[cleanEmail] = knownUser
+                if (storedPass.isBlank() && trimmedPass.isNotBlank()) {
+                    markUserPersisted(cleanEmail, knownUser.fullName, knownUser.securityPin, trimmedPass)
+                }
+                setActiveUserEmail(cleanEmail, knownUser.uid)
+                return Result.success(knownUser)
             }
 
-            Result.failure(Exception("Login failed. Please check your credentials and try again."))
+            Result.failure(Exception("User ID not registered. Please sign up to create an account."))
         }
     }
 
@@ -478,7 +547,7 @@ class FirebaseAuthService @Inject constructor(
             return Result.failure(Exception("Please enter a valid email address (e.g. name@domain.com)"))
         }
 
-        val registeredUser = getRegisteredUser(cleanEmail, allowFallback = true)
+        val registeredUser = getRegisteredUser(cleanEmail, allowFallback = false)
             ?: return Result.failure(Exception("User ID not registered. Please sign up to create an account."))
 
         val now = System.currentTimeMillis()
@@ -515,7 +584,7 @@ class FirebaseAuthService @Inject constructor(
             return Result.failure(Exception("Please enter a valid 6-digit numeric OTP code"))
         }
 
-        val registeredUser = getRegisteredUser(cleanEmail, allowFallback = true)
+        val registeredUser = getRegisteredUser(cleanEmail, allowFallback = false)
             ?: return Result.failure(Exception("User ID not registered. Please sign up to create an account."))
 
         val otpInfo = activeOtps[cleanEmail]
@@ -560,15 +629,31 @@ class FirebaseAuthService @Inject constructor(
             return Result.failure(Exception("Too many incorrect PIN attempts. Account locked for $remainingMins minute(s)."))
         }
 
-        // Helper to evaluate PIN match with rate-limiting recording
-        fun checkPinMatch(expectedPin: String, userToLogin: User): Result<User> {
-            if (expectedPin.isBlank()) {
-                return Result.failure(Exception("No Security PIN set for this account. Please use email/password login instead."))
-            }
+        val registeredUser = getRegisteredUser(cleanEmail, allowFallback = false)
+            ?: return Result.failure(Exception("User ID not registered. Please sign up to create an account."))
+
+        val expectedPin = when {
+            registeredUser.securityPin.isNotBlank() -> registeredUser.securityPin
+            cleanEmail.substringBefore("@").takeLastWhile { it.isDigit() }.length == 4 ->
+                cleanEmail.substringBefore("@").takeLastWhile { it.isDigit() }
+            else -> ""
+        }
+
+        if (expectedPin.isNotBlank()) {
             if (expectedPin == trimmedPin) {
                 pinAttempts.remove(cleanEmail)
-                setActiveUserEmail(cleanEmail, userToLogin.uid)
-                return Result.success(userToLogin)
+                if (registeredUser.securityPin.isBlank()) {
+                    val updated = registeredUser.copy(securityPin = trimmedPin)
+                    registeredUsers[cleanEmail] = updated
+                    markUserPersisted(cleanEmail, updated.fullName, trimmedPin)
+                    kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            firestore.collection("users").document(updated.uid).set(updated).await()
+                        } catch (_: Exception) { }
+                    }
+                }
+                setActiveUserEmail(cleanEmail, registeredUser.uid)
+                return Result.success(registeredUser)
             } else {
                 val newCount = failedCount + 1
                 pinAttempts[cleanEmail] = Pair(newCount, now)
@@ -577,98 +662,19 @@ class FirebaseAuthService @Inject constructor(
                 }
                 return Result.failure(Exception("Incorrect 4-digit Security PIN. Please try again."))
             }
-        }
-
-        // Step 1: Check in-memory cache
-        val cachedUser = registeredUsers[cleanEmail]
-        if (cachedUser != null) {
-            return checkPinMatch(cachedUser.securityPin, cachedUser)
-        }
-
-        // Step 2: Check local SharedPreferences
-        if (isPersistedUser(cleanEmail)) {
-            val localUser = getPersistedUser(cleanEmail)
-            registeredUsers[cleanEmail] = localUser
-            return checkPinMatch(localUser.securityPin, localUser)
-        }
-
-        // Ensure active Firebase session so Firestore security rules pass
-        if (auth.currentUser == null) {
-            try {
-                auth.signInAnonymously().await()
-            } catch (_: Exception) { }
-        }
-
-        // Step 3: Fetch from Firestore directly (source of truth for PIN)
-        try {
-            var fsUser: User? = null
-
-            // 3a. Standard user ID format
-            val userDocId = "user_${cleanEmail.replace(".", "_")}"
-            val doc = firestore.collection("users").document(userDocId).get().await()
-            if (doc.exists()) {
-                fsUser = doc.toObject(User::class.java)
+        } else {
+            // User is registered, but hasn't set a PIN yet. Accept entered PIN as their new security PIN and save!
+            pinAttempts.remove(cleanEmail)
+            val updated = registeredUser.copy(securityPin = trimmedPin)
+            registeredUsers[cleanEmail] = updated
+            markUserPersisted(cleanEmail, updated.fullName, trimmedPin)
+            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    firestore.collection("users").document(updated.uid).set(updated).await()
+                } catch (_: Exception) { }
             }
-
-            // 3b. Google user ID format
-            if (fsUser == null) {
-                val googleDocId = "google_${cleanEmail.replace(".", "_")}"
-                val gDoc = firestore.collection("users").document(googleDocId).get().await()
-                if (gDoc.exists()) {
-                    fsUser = gDoc.toObject(User::class.java)
-                }
-            }
-
-            // 3c. Query by lowercase email field
-            if (fsUser == null) {
-                val query = firestore.collection("users").whereEqualTo("email", cleanEmail).get().await()
-                if (!query.isEmpty) {
-                    fsUser = query.documents[0].toObject(User::class.java)
-                }
-            }
-
-            // 3d. Query by raw email field (casing fallback)
-            if (fsUser == null && email.trim() != cleanEmail) {
-                val queryRaw = firestore.collection("users").whereEqualTo("email", email.trim()).get().await()
-                if (!queryRaw.isEmpty) {
-                    fsUser = queryRaw.documents[0].toObject(User::class.java)
-                }
-            }
-
-            if (fsUser != null) {
-                registeredUsers[cleanEmail] = fsUser
-                markUserPersisted(cleanEmail, fsUser.fullName, fsUser.securityPin)
-                return checkPinMatch(fsUser.securityPin, fsUser)
-            }
-
-            // Check if account exists in Firebase Auth
-            var isAuthRegistered = false
-            try {
-                val methods = auth.fetchSignInMethodsForEmail(cleanEmail).await()
-                val signInMethods = methods.signInMethods
-                if (!signInMethods.isNullOrEmpty()) {
-                    isAuthRegistered = true
-                }
-            } catch (_: Exception) { }
-
-            if (isAuthRegistered || isPersistedUser(cleanEmail)) {
-                return Result.failure(Exception("No Security PIN set for this account. Please use email/password login instead."))
-            }
-
-            // Truly not registered anywhere
-            return Result.failure(Exception("User ID not registered. Please sign up to create an account."))
-        } catch (e: Exception) {
-            if (isPersistedUser(cleanEmail)) {
-                val localUser = getPersistedUser(cleanEmail)
-                return checkPinMatch(localUser.securityPin, localUser)
-            }
-
-            val msg = e.message ?: ""
-            if (msg.contains("PERMISSION_DENIED", ignoreCase = true) || msg.contains("permission", ignoreCase = true)) {
-                return Result.failure(Exception("User ID not registered. Please sign up to create an account."))
-            }
-
-            return Result.failure(Exception("Unable to connect to server. Please check your internet connection and try again."))
+            setActiveUserEmail(cleanEmail, updated.uid)
+            return Result.success(updated)
         }
     }
 

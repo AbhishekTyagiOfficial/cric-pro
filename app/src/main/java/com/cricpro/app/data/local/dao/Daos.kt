@@ -15,6 +15,9 @@ interface TeamDao {
     @Query("SELECT * FROM teams WHERE teamId = :teamId")
     suspend fun getTeamByIdDirect(teamId: String): TeamEntity?
 
+    @Query("SELECT * FROM teams WHERE ownerId = :ownerId LIMIT 1")
+    suspend fun getTeamByOwnerDirect(ownerId: String): TeamEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTeam(team: TeamEntity)
 
@@ -69,6 +72,9 @@ interface MatchDao {
     @Query("SELECT * FROM matches WHERE matchId = :matchId")
     suspend fun getMatchByIdDirect(matchId: String): MatchEntity?
 
+    @Query("SELECT * FROM matches WHERE creatorId = :creatorId LIMIT 1")
+    suspend fun getMatchByCreatorDirect(creatorId: String): MatchEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMatch(match: MatchEntity)
 
@@ -89,6 +95,9 @@ interface BallDao {
 
     @Query("DELETE FROM balls WHERE matchId = :matchId AND inningsNumber = :inningsNumber AND ballId = (SELECT ballId FROM balls WHERE matchId = :matchId AND inningsNumber = :inningsNumber ORDER BY timestamp DESC LIMIT 1)")
     suspend fun deleteLastBall(matchId: String, inningsNumber: Int)
+
+    @Query("DELETE FROM balls WHERE matchId = :matchId")
+    suspend fun deleteBallsForMatch(matchId: String)
 }
 
 @Dao

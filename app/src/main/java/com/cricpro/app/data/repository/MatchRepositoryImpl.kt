@@ -22,6 +22,7 @@ import com.cricpro.app.data.local.dao.TeamDao
 
 class MatchRepositoryImpl @Inject constructor(
     private val matchDao: MatchDao,
+    private val ballDao: BallDao,
     private val teamDao: TeamDao,
     private val playerDao: PlayerDao,
     private val firestoreService: FirestoreService,
@@ -223,6 +224,21 @@ class MatchRepositoryImpl @Inject constructor(
         return matchDao.getMatches().map { list ->
             list.filter { it.title.contains(query, ignoreCase = true) || it.groundName.contains(query, ignoreCase = true) }
                 .map { it.toDomain() }
+        }
+    }
+
+    override suspend fun deleteMatch(matchId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            matchDao.deleteMatch(matchId)
+            ballDao.deleteBallsForMatch(matchId)
+            try {
+                firestoreService.deleteMatch(matchId)
+            } catch (ignored: Exception) {
+                // Offline fallback - match is deleted locally
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }

@@ -10,7 +10,9 @@ import com.cricpro.app.domain.repository.TeamRepository
 import com.cricpro.app.domain.repository.TournamentRepository
 import com.cricpro.app.data.remote.RemoteConfigManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class HomeUiState(
@@ -24,12 +26,45 @@ data class HomeUiState(
 )
 
 @HiltViewModel
-class HomeViewModel @Inject constructor(
+class HomeViewModel(
     private val matchRepository: MatchRepository,
     private val teamRepository: TeamRepository,
     private val tournamentRepository: TournamentRepository,
-    private val remoteConfigManager: RemoteConfigManager
+    tournamentTabFlow: Flow<Boolean>,
+    private val customScope: CoroutineScope? = null
 ) : ViewModel() {
+
+    @Inject
+    constructor(
+        matchRepository: MatchRepository,
+        teamRepository: TeamRepository,
+        tournamentRepository: TournamentRepository,
+        remoteConfigManager: RemoteConfigManager
+    ) : this(
+        matchRepository,
+        teamRepository,
+        tournamentRepository,
+        remoteConfigManager.isTournamentTabEnabled,
+        null
+    )
+
+    constructor(
+        matchRepository: MatchRepository,
+        teamRepository: TeamRepository,
+        tournamentRepository: TournamentRepository,
+        testScope: CoroutineScope
+    ) : this(
+        matchRepository,
+        teamRepository,
+        tournamentRepository,
+        flowOf(true),
+        testScope
+    )
+
+    private val activeScope: CoroutineScope get() = customScope ?: viewModelScope
+
+    private val _isDeleting = MutableStateFlow(false)
+    val isDeleting: StateFlow<Boolean> = _isDeleting.asStateFlow()
 
     val uiState: StateFlow<HomeUiState> = combine(
         matchRepository.getRecentMatches(),
@@ -38,7 +73,7 @@ class HomeViewModel @Inject constructor(
         combine(
             teamRepository.getTeams(),
             tournamentRepository.getTournaments(),
-            remoteConfigManager.isTournamentTabEnabled
+            tournamentTabFlow
         ) { teamsList, toursList, tournamentTabEnabled ->
             Triple(teamsList, toursList, tournamentTabEnabled)
         }
@@ -54,5 +89,28 @@ class HomeViewModel @Inject constructor(
             isTournamentTabEnabled = tournamentTabEnabled,
             isLoading = false
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState(isLoading = true))
+    }.stateIn(activeScope, SharingStarted.WhileSubscribed(5000), HomeUiState(isLoading = true))
+
+    fun deleteMatch(
+        matchId: String,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        if (_isDeleting.value) return
+        _isDeleting.value = true
+        activeScope.launch {
+            try {
+                val result = matchRepository.deleteMatch(matchId)
+                if (result.isSuccess) {
+                    onSuccess()
+                } else {
+                    onError(result.exceptionOrNull()?.localizedMessage ?: "Failed to delete match")
+                }
+            } catch (e: Exception) {
+                onError(e.localizedMessage ?: "Failed to delete match")
+            } finally {
+                _isDeleting.value = false
+            }
+        }
+    }
 }
