@@ -81,6 +81,32 @@ fun LiveScoringScreen(
     val completedOverCount = legalBalls / 6
     val isOverJustCompleted = legalBalls > 0 && legalBalls % 6 == 0 && currentInnings?.ballsHistory?.lastOrNull()?.isLegalDelivery == true && !isMatchCompleted && !isInningsFinished
 
+    val bowlerCount = if (bowlingPlayers.isNotEmpty()) bowlingPlayers.size else 11
+    val previousCompletedBowlers: Set<String> = if (completedOverCount > 0 && bowlerCount > 1) {
+        val lastCompletedOverIndex = completedOverCount - 1
+        val ballsInLastOver = currentInnings?.ballsHistory?.filter { it.overNumber == lastCompletedOverIndex } ?: emptyList()
+        val bowlersFromOverNum = ballsInLastOver.map { it.bowlerId }.filter { it.isNotBlank() }.toSet()
+        if (bowlersFromOverNum.isNotEmpty()) {
+            bowlersFromOverNum
+        } else {
+            val targetLegalBallIndex = completedOverCount * 6
+            var legalCount = 0
+            var bowlerAtTarget: String? = null
+            for (ball in (currentInnings?.ballsHistory ?: emptyList())) {
+                if (ball.isLegalDelivery) {
+                    legalCount++
+                    if (legalCount == targetLegalBallIndex) {
+                        bowlerAtTarget = ball.bowlerId
+                        break
+                    }
+                }
+            }
+            if (!bowlerAtTarget.isNullOrBlank()) setOf(bowlerAtTarget) else emptySet()
+        }
+    } else {
+        emptySet()
+    }
+
     var lastHandledOverIndex by remember { mutableStateOf(completedOverCount) }
     var lastHandledWicketCount by remember { mutableStateOf(totalWickets) }
 
@@ -588,7 +614,6 @@ fun LiveScoringScreen(
             currentSelected = match?.currentStrikerId ?: "Player 1",
             currentStriker = match?.currentStrikerId,
             currentNonStriker = match?.currentNonStrikerId,
-            previousBowler = match?.currentBowlerId,
             existingBatters = currentInnings?.batters ?: emptyMap(),
             onPlayerSelected = { viewModel.selectStriker(it); showStrikerDialog = false },
             onDismiss = { showStrikerDialog = false }
@@ -603,7 +628,6 @@ fun LiveScoringScreen(
             currentSelected = match?.currentNonStrikerId ?: "Player 2",
             currentStriker = match?.currentStrikerId,
             currentNonStriker = match?.currentNonStrikerId,
-            previousBowler = match?.currentBowlerId,
             existingBatters = currentInnings?.batters ?: emptyMap(),
             onPlayerSelected = { viewModel.selectNonStriker(it); showNonStrikerDialog = false },
             onDismiss = { showNonStrikerDialog = false }
@@ -619,7 +643,7 @@ fun LiveScoringScreen(
             currentSelected = match?.currentBowlerId ?: "Bowler 1",
             currentStriker = match?.currentStrikerId,
             currentNonStriker = match?.currentNonStrikerId,
-            previousBowler = match?.currentBowlerId,
+            previousBowlers = previousCompletedBowlers,
             onPlayerSelected = { viewModel.selectBowler(it); showBowlerDialog = false },
             onDismiss = { showBowlerDialog = false }
         )
@@ -818,6 +842,7 @@ fun PlayerSelectionDialog(
     currentStriker: String? = null,
     currentNonStriker: String? = null,
     previousBowler: String? = null,
+    previousBowlers: Set<String> = emptySet(),
     existingBatters: Map<String, BatterScore> = emptyMap(),
     onPlayerSelected: (String) -> Unit,
     onDismiss: () -> Unit
@@ -840,7 +865,7 @@ fun PlayerSelectionDialog(
                     items(availablePlayers) { player ->
                         val isStriker = player == currentStriker
                         val isNonStriker = player == currentNonStriker
-                        val isPreviousBowler = player == previousBowler
+                        val isPreviousBowler = (previousBowler != null && player == previousBowler) || previousBowlers.contains(player)
                         val isOut = existingBatters[player]?.isOut == true
                         val isDisabled = isStriker || isNonStriker || isPreviousBowler || isOut
 

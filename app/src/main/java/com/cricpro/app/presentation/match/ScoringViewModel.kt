@@ -399,14 +399,7 @@ class ScoringViewModel @Inject constructor(
                         showMatchCompletedDialog = showMatchCompleted
                     )
 
-                    if (updatedMatch.status != match.status ||
-                        updatedMatch.firstInnings != match.firstInnings ||
-                        updatedMatch.secondInnings != match.secondInnings ||
-                        updatedMatch.currentStrikerId != match.currentStrikerId ||
-                        updatedMatch.currentNonStrikerId != match.currentNonStrikerId ||
-                        updatedMatch.currentBowlerId != match.currentBowlerId ||
-                        updatedMatch.status == MatchStatus.COMPLETED
-                    ) {
+                    if (match.status != MatchStatus.COMPLETED && updatedMatch.status == MatchStatus.COMPLETED) {
                         viewModelScope.launch {
                             scoringRepository.syncInningsState(updatedMatch.matchId, updatedMatch)
                         }
