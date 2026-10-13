@@ -139,8 +139,12 @@ class ScoringEngine {
             currentOverBowlerRuns += bowlerRunsThisBall
             currentOverBowlerId = ball.bowlerId
 
+            val bowlerDisplay = ball.bowlerName?.takeIf { it.isNotBlank() }
+                ?: (if (currentBowler.name.isNotBlank() && currentBowler.name != ball.bowlerId) currentBowler.name else null)
+                ?: ball.bowlerId
+
             val updatedBowler = currentBowler.copy(
-                name = if (currentBowler.name.isNotBlank()) currentBowler.name else ball.bowlerId,
+                name = bowlerDisplay,
                 legalBalls = if (isLegal) currentBowler.legalBalls + 1 else currentBowler.legalBalls,
                 runsConceded = currentBowler.runsConceded + bowlerRunsThisBall,
                 wides = if (extraType == ExtraType.WIDE) currentBowler.wides + 1 else currentBowler.wides,
@@ -160,12 +164,40 @@ class ScoringEngine {
                     battersMap.values.find { it.name == rawDismissedId || it.playerId == rawDismissedId }?.playerId ?: rawDismissedId
                 }
 
+                // Bowler display name
+                val wicketBowlerDisplay = ball.bowlerName?.takeIf { it.isNotBlank() }
+                    ?: bowlersMap[bowlerKey]?.name?.takeIf { it.isNotBlank() }
+                    ?: ball.bowlerId
+
+                // Fielder display name
+                val fielderDisplay = ball.fielderName?.takeIf { it.isNotBlank() }
+                    ?: ball.fielderId?.takeIf { it.isNotBlank() }
+                    ?: ""
+
+                val dismissalText = when (ball.wicketType) {
+                    WicketType.CAUGHT -> {
+                        if (fielderDisplay.isNotBlank()) "c $fielderDisplay b $wicketBowlerDisplay" else "c & b $wicketBowlerDisplay"
+                    }
+                    WicketType.RUN_OUT -> {
+                        if (fielderDisplay.isNotBlank()) "run out ($fielderDisplay)" else "run out"
+                    }
+                    WicketType.BOWLED -> "b $wicketBowlerDisplay"
+                    WicketType.LBW -> "lbw b $wicketBowlerDisplay"
+                    WicketType.STUMPED -> {
+                        if (fielderDisplay.isNotBlank()) "st $fielderDisplay b $wicketBowlerDisplay" else "stumped b $wicketBowlerDisplay"
+                    }
+                    WicketType.HIT_WICKET -> "hit wicket b $wicketBowlerDisplay"
+                    WicketType.RETIRED_OUT -> "retired out"
+                    WicketType.NONE -> ""
+                }
+
                 // Mark dismissed batter
                 val dismissedBatter = battersMap[dismissedKey] ?: BatterScore(playerId = rawDismissedId, name = rawDismissedId)
+                val dismissedDisplayName = if (dismissedBatter.name.isNotBlank()) dismissedBatter.name else rawDismissedId
                 battersMap[dismissedKey] = dismissedBatter.copy(
-                    name = if (dismissedBatter.name.isNotBlank()) dismissedBatter.name else rawDismissedId,
+                    name = dismissedDisplayName,
                     isOut = true,
-                    dismissalInfo = "${ball.wicketType.name.lowercase()} b ${ball.bowlerId}"
+                    dismissalInfo = dismissalText
                 )
 
                 // Bowler gets credit for wicket if not run out / retired out
@@ -183,7 +215,7 @@ class ScoringEngine {
                         wicketNumber = totalWickets,
                         score = totalRuns,
                         oversFormatted = oversStr,
-                        dismissedPlayerName = rawDismissedId
+                        dismissedPlayerName = dismissedDisplayName
                     )
                 )
 

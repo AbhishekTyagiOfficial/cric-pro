@@ -36,6 +36,7 @@ data class Ball(
     val strikerId: String = "",
     val nonStrikerId: String = "",
     val bowlerId: String = "",
+    val bowlerName: String? = null,
     val runsScored: Int = 0, // 0, 1, 2, 3, 4, 5, 6
     val extraType: ExtraType = ExtraType.NONE,
     val extraRuns: Int = 0, // e.g. 1 for wide/no-ball plus any extra runs
@@ -43,6 +44,7 @@ data class Ball(
     val wicketType: WicketType = WicketType.NONE,
     val dismissedPlayerId: String? = null,
     val fielderId: String? = null,
+    val fielderName: String? = null,
     val wagonWheel: WagonWheelPoint? = null,
     val commentary: String = "",
     val timestamp: Long = System.currentTimeMillis()

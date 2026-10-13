@@ -46,11 +46,41 @@ class ScoreBallUseCase @Inject constructor(
         val overNum = currentLegal / 6
         val ballNum = (currentLegal % 6) + (if (ball.isLegalDelivery) 1 else 0)
 
+        val bowlerDisplayName = ball.bowlerName?.takeIf { it.isNotBlank() } ?: ball.bowlerId
+        val fielderDisplayName = ball.fielderName?.takeIf { it.isNotBlank() } ?: ball.fielderId ?: ""
+        val strikerDisplayName = ball.strikerId
+
+        val generatedCommentary = if (ball.commentary.isNotBlank()) {
+            ball.commentary
+        } else {
+            when (ball.wicketType) {
+                WicketType.CAUGHT -> "OUT! $bowlerDisplayName to $strikerDisplayName, c $fielderDisplayName b $bowlerDisplayName"
+                WicketType.RUN_OUT -> "OUT! $bowlerDisplayName to $strikerDisplayName, run out ($fielderDisplayName)"
+                WicketType.BOWLED -> "OUT! $bowlerDisplayName to $strikerDisplayName, b $bowlerDisplayName"
+                WicketType.LBW -> "OUT! $bowlerDisplayName to $strikerDisplayName, lbw b $bowlerDisplayName"
+                WicketType.STUMPED -> "OUT! $bowlerDisplayName to $strikerDisplayName, st $fielderDisplayName b $bowlerDisplayName"
+                WicketType.HIT_WICKET -> "OUT! $bowlerDisplayName to $strikerDisplayName, hit wicket b $bowlerDisplayName"
+                WicketType.RETIRED_OUT -> "OUT! $strikerDisplayName retired out"
+                WicketType.NONE -> {
+                    when {
+                        ball.runsScored == 4 -> "FOUR! $bowlerDisplayName to $strikerDisplayName, four runs"
+                        ball.runsScored == 6 -> "SIX! $bowlerDisplayName to $strikerDisplayName, six runs"
+                        ball.extraType == ExtraType.WIDE -> "WIDE! $bowlerDisplayName delivers a wide"
+                        ball.extraType == ExtraType.NO_BALL -> "NO BALL! $bowlerDisplayName oversteps"
+                        ball.runsScored > 0 -> "$bowlerDisplayName to $strikerDisplayName, ${ball.runsScored} runs"
+                        else -> "$bowlerDisplayName to $strikerDisplayName, no run"
+                    }
+                }
+            }
+        }
+
         val ballWithInnings = ball.copy(
             inningsNumber = inningsNum,
             overNumber = overNum,
             ballNumberInOver = ballNum,
-            totalLegalBallsInInnings = currentLegal + (if (ball.isLegalDelivery) 1 else 0)
+            totalLegalBallsInInnings = currentLegal + (if (ball.isLegalDelivery) 1 else 0),
+            bowlerName = bowlerDisplayName,
+            commentary = generatedCommentary
         )
 
         val maxWickets = if (currentInnings.battingTeamId == currentMatch.teamA.teamId) {

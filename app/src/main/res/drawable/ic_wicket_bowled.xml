@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Ball hitting from left -->
+    <path
+        android:fillColor="#DC2626"
+        android:pathData="M3.5,8a2,2 0 1,0 0.001,-0.001z" />
+    <!-- Impact speed lines -->
+    <path
+        android:strokeColor="#DC2626"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M1.5,6.5L3,7.5 M1.5,9.5L3,8.5" />
+    <!-- Bails flying -->
+    <path
+        android:strokeColor="#DC2626"
+        android:strokeWidth="1.4"
+        android:strokeLineCap="round"
+        android:pathData="M8,3.5L12,2.5 M14,2.5L18,4" />
+    <!-- Stumps -->
+    <path
+        android:fillColor="#DC2626"
+        android:pathData="M8,5h1.8v14h-1.8z M12,5h1.8v14h-1.8z M16,5h1.8v14h-1.8z" />
+</vector>

@@ -14,7 +14,7 @@ import com.cricpro.app.data.local.entity.*
         TournamentEntity::class,
         SyncQueueEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class CricProDatabase : RoomDatabase() {

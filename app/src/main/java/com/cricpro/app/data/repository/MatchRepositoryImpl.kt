@@ -495,12 +495,16 @@ class ScoringRepositoryImpl @Inject constructor(
             strikerId = strikerId,
             nonStrikerId = nonStrikerId,
             bowlerId = bowlerId,
+            bowlerName = bowlerName,
             runsScored = runsScored,
             extraType = try { ExtraType.valueOf(extraType) } catch (e: Exception) { ExtraType.NONE },
             extraRuns = extraRuns,
             isLegalDelivery = isLegalDelivery,
             wicketType = try { WicketType.valueOf(wicketType) } catch (e: Exception) { WicketType.NONE },
             dismissedPlayerId = dismissedPlayerId,
+            fielderId = fielderId,
+            fielderName = fielderName,
+            commentary = commentary ?: "",
             timestamp = timestamp
         )
     }
@@ -515,12 +519,16 @@ class ScoringRepositoryImpl @Inject constructor(
             strikerId = strikerId,
             nonStrikerId = nonStrikerId,
             bowlerId = bowlerId,
+            bowlerName = bowlerName,
             runsScored = runsScored,
             extraType = extraType.name,
             extraRuns = extraRuns,
             isLegalDelivery = isLegalDelivery,
             wicketType = wicketType.name,
             dismissedPlayerId = dismissedPlayerId,
+            fielderId = fielderId,
+            fielderName = fielderName,
+            commentary = commentary,
             timestamp = timestamp
         )
     }

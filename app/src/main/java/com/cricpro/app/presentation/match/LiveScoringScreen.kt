@@ -69,6 +69,8 @@ fun LiveScoringScreen(
 
     var selectedExtra by remember { mutableStateOf(ExtraType.NONE) }
     var showWicketDialog by remember { mutableStateOf(false) }
+    var pendingWicketType by remember { mutableStateOf<WicketType?>(null) }
+    var showFielderDialog by remember { mutableStateOf(false) }
     var showStrikerDialog by remember { mutableStateOf(false) }
     var showNonStrikerDialog by remember { mutableStateOf(false) }
     var showBowlerDialog by remember { mutableStateOf(false) }
@@ -582,27 +584,42 @@ fun LiveScoringScreen(
     }
 
     if (showWicketDialog && !isMatchCompleted) {
-        AlertDialog(
-            onDismissRequest = { showWicketDialog = false },
-            title = { Text("Select Wicket Type") },
-            text = {
-                Column {
-                    WicketType.values().filter { it != WicketType.NONE }.forEach { type ->
-                        TextButton(
-                            onClick = {
-                                viewModel.scoreRuns(0, selectedExtra, type)
-                                selectedExtra = ExtraType.NONE
-                                showWicketDialog = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(type.name, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
-                        }
-                    }
+        WicketSelectionBottomSheet(
+            onSelectWicket = { type ->
+                showWicketDialog = false
+                if (type == WicketType.CAUGHT || type == WicketType.RUN_OUT) {
+                    pendingWicketType = type
+                    showFielderDialog = true
+                } else {
+                    viewModel.scoreRuns(0, selectedExtra, type)
+                    selectedExtra = ExtraType.NONE
                 }
             },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = { showWicketDialog = false }) { Text("Cancel") } }
+            onDismiss = { showWicketDialog = false }
+        )
+    }
+
+    if (showFielderDialog && !isMatchCompleted && pendingWicketType != null) {
+        SelectFielderDialog(
+            fieldingTeamName = bowlingTeamName,
+            fieldingPlayers = bowlingPlayers,
+            wicketType = pendingWicketType ?: WicketType.CAUGHT,
+            onFielderSelected = { fielderId, fielderName ->
+                viewModel.scoreRuns(
+                    runs = 0,
+                    extraType = selectedExtra,
+                    wicketType = pendingWicketType ?: WicketType.CAUGHT,
+                    fielderId = fielderId,
+                    fielderName = fielderName
+                )
+                selectedExtra = ExtraType.NONE
+                pendingWicketType = null
+                showFielderDialog = false
+            },
+            onDismiss = {
+                pendingWicketType = null
+                showFielderDialog = false
+            }
         )
     }
 

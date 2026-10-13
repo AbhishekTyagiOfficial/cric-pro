@@ -1,0 +1,29 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Runner head -->
+    <path
+        android:fillColor="#DC2626"
+        android:pathData="M9,5a1.8,1.8 0 1,0 0.001,-0.001z" />
+    <!-- Running body, legs, arms -->
+    <path
+        android:strokeColor="#DC2626"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8.5,7L7,11.5L5,13 M7,11.5L9.5,14L10,18.5 M7.5,12L4.5,14.5L3,18 M9,9L12,9.5L14.5,8" />
+    <!-- Stumps on right being broken -->
+    <path
+        android:strokeColor="#DC2626"
+        android:strokeWidth="1.4"
+        android:strokeLineCap="round"
+        android:pathData="M18.5,10v9 M20.5,11v8" />
+    <!-- Bail dislodged -->
+    <path
+        android:strokeColor="#DC2626"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M17.5,8L21.5,9.5" />
+</vector>

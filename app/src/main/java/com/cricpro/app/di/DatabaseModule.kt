@@ -11,9 +11,21 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
+
+    val MIGRATION_1_2 = object : Migration(1, 2) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE balls ADD COLUMN bowlerName TEXT DEFAULT NULL")
+            db.execSQL("ALTER TABLE balls ADD COLUMN fielderId TEXT DEFAULT NULL")
+            db.execSQL("ALTER TABLE balls ADD COLUMN fielderName TEXT DEFAULT NULL")
+            db.execSQL("ALTER TABLE balls ADD COLUMN commentary TEXT DEFAULT NULL")
+        }
+    }
 
     @Provides
     @Singleton
@@ -22,7 +34,10 @@ object DatabaseModule {
             context,
             CricProDatabase::class.java,
             "cricpro.db"
-        ).fallbackToDestructiveMigration().build()
+        )
+        .addMigrations(MIGRATION_1_2)
+        .fallbackToDestructiveMigration()
+        .build()
     }
 
     @Provides

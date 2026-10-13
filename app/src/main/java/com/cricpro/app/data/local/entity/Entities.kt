@@ -129,7 +129,11 @@ data class BallEntity(
     val isLegalDelivery: Boolean,
     val wicketType: String,
     val dismissedPlayerId: String?,
-    val timestamp: Long
+    val bowlerName: String? = null,
+    val fielderId: String? = null,
+    val fielderName: String? = null,
+    val commentary: String? = null,
+    val timestamp: Long = System.currentTimeMillis()
 )
 
 @Entity(tableName = "tournaments")

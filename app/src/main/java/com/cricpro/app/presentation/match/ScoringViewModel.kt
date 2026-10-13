@@ -409,7 +409,14 @@ class ScoringViewModel @Inject constructor(
         }
     }
 
-    fun scoreRuns(runs: Int, extraType: ExtraType = ExtraType.NONE, wicketType: WicketType = WicketType.NONE) {
+    fun scoreRuns(
+        runs: Int,
+        extraType: ExtraType = ExtraType.NONE,
+        wicketType: WicketType = WicketType.NONE,
+        fielderId: String? = null,
+        fielderName: String? = null,
+        dismissedPlayerId: String? = null
+    ) {
         _overrideStrikerId.value = null
         _overrideNonStrikerId.value = null
         _overrideBowlerId.value = null
@@ -431,6 +438,12 @@ class ScoringViewModel @Inject constructor(
         val inn2 = baseMatch.secondInnings ?: Innings(2, baseMatch.teamB.teamId, baseMatch.teamA.teamId)
         val match = baseMatch.copy(firstInnings = inn1, secondInnings = inn2)
 
+        val activeInnings = if (match.currentInningsNumber == 1) inn1 else inn2
+        val bowlTeamActive = if (activeInnings.bowlingTeamId == match.teamB.teamId) match.teamB else match.teamA
+        val activeBowlerId = match.currentBowlerId ?: "B1"
+        val bowlerPlayer = bowlTeamActive.players.find { it.playerId == activeBowlerId || it.name == activeBowlerId }
+        val activeBowlerName = bowlerPlayer?.name ?: activeBowlerId
+
         val isLegal = extraType != ExtraType.WIDE && extraType != ExtraType.NO_BALL
         val extraRunsVal = when (extraType) {
             ExtraType.WIDE -> if (settingsManager.isWideExtraRunEnabledSync()) 1 else 0
@@ -443,12 +456,16 @@ class ScoringViewModel @Inject constructor(
             inningsNumber = match.currentInningsNumber,
             strikerId = match.currentStrikerId ?: "P1",
             nonStrikerId = match.currentNonStrikerId ?: "P2",
-            bowlerId = match.currentBowlerId ?: "B1",
+            bowlerId = activeBowlerId,
+            bowlerName = activeBowlerName,
             runsScored = runs,
             extraType = extraType,
             extraRuns = extraRunsVal,
             isLegalDelivery = isLegal,
             wicketType = wicketType,
+            dismissedPlayerId = dismissedPlayerId ?: (if (wicketType != WicketType.NONE) match.currentStrikerId else null),
+            fielderId = fielderId,
+            fielderName = fielderName,
             wagonWheel = WagonWheelPoint(angleDegrees = uiState.value.wagonWheelAngle, distanceFraction = 0.8f)
         )
 
